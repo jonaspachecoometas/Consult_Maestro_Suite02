@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { pool } from "./db";
 import { runMigrationSoe00, startEventWorker } from "./soe";
+import { empresaMiddleware } from "./empresaMiddleware";
 import { startAutomationEngine } from "./automationService";
 import { startRecoveryOverdueCron } from "./recovery/overdueCron";
 import { startNfeMonitor } from "./control/nfeMonitor";
@@ -1382,6 +1383,36 @@ async function runStartupMigrations() {
         ON analytics.fact_crm(tenant_id, opportunity_natural_key);
     `);
 
+    // EMPRESA-SETUP: tabela de empresas do grupo
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_empresas (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        razao_social TEXT NOT NULL,
+        nome_fantasia TEXT,
+        cnpj TEXT NOT NULL,
+        ie TEXT, im TEXT, email TEXT, phone TEXT,
+        tipo TEXT DEFAULT 'filial',
+        status TEXT DEFAULT 'active',
+        cep TEXT, logradouro TEXT, numero TEXT,
+        complemento TEXT, bairro TEXT, cidade TEXT,
+        uf TEXT NOT NULL DEFAULT 'PR',
+        codigo_ibge TEXT,
+        regime_tributario TEXT,
+        ambiente_fiscal TEXT DEFAULT 'homologacao',
+        serie_nfe INTEGER DEFAULT 1,
+        plus_empresa_id INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_tenant_empresas_tenant ON tenant_empresas(tenant_id);
+    `);
+
+    await client.query(`
+      ALTER TABLE lancamentos_financeiros
+      ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES tenant_empresas(id) ON DELETE SET NULL;
+    `);
+
     console.log('[migration] startup migrations completed successfully');
   } catch (err) {
     console.error('[migration] startup migration error:', err);
@@ -1418,6 +1449,9 @@ async function runStartupMigrations() {
 
   // SOE EventWorker — processa outbox de eventos em background
   startEventWorker();
+
+  // EMPRESA-SETUP: extrai empresa/grupo ativo dos headers HTTP
+  app.use(empresaMiddleware);
 
   await registerRoutes(httpServer, app);
 

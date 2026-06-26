@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const ACTIVE_TENANT_STORAGE_KEY = "arcadia.activeTenantId";
+const ACTIVE_EMPRESA_STORAGE_KEY = "arcadia_empresa_ativa";
 
 export function getActiveTenantId(): string | null {
   if (typeof window === "undefined") return null;
@@ -29,6 +30,10 @@ function buildHeaders(hasJsonBody: boolean): Record<string, string> {
   if (hasJsonBody) headers["Content-Type"] = "application/json";
   const tenantId = getActiveTenantId();
   if (tenantId) headers["x-tenant-id"] = tenantId;
+  try {
+    const empresaId = window.localStorage.getItem(ACTIVE_EMPRESA_STORAGE_KEY);
+    if (empresaId) headers["x-empresa-id"] = empresaId;
+  } catch { /* noop */ }
   return headers;
 }
 

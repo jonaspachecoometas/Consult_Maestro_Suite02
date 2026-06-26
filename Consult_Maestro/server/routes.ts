@@ -116,6 +116,8 @@ import {
   syncJobs,
   automationRules,
   notifications,
+  tenantEmpresas,
+  insertTenantEmpresaSchema,
 } from "@shared/schema";
 import { encryptConfig, decryptConfig } from "./cryptoService";
 import { invalidateTenantCache as invalidateBiTenantCache } from "./bi/cache";
@@ -476,6 +478,59 @@ export async function registerRoutes(
   // dependa de req.tenantId via requireTenant — middlewares só rodam para
   // handlers registrados depois deles na cadeia do Express.
   app.use(tenantContext);
+
+  // ── EMPRESA-SETUP: CRUD de empresas do grupo ────────────────────────────
+  app.get("/api/empresas", isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const { db } = await import("./db");
+      const { eq } = await import("drizzle-orm");
+      const rows = await db.select().from(tenantEmpresas).where(eq(tenantEmpresas.tenantId, req.tenantId));
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/empresas/active", isAuthenticated, requireTenant, async (req: any, res) => {
+    const empresaId = (req as any).activeEmpresaId;
+    if (!empresaId) return res.json(null);
+    try {
+      const { db } = await import("./db");
+      const { eq } = await import("drizzle-orm");
+      const rows = await db.select().from(tenantEmpresas)
+        .where(eq(tenantEmpresas.id, parseInt(empresaId, 10)));
+      res.json(rows[0] ?? null);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/empresas", isAuthenticated, requireTenantAdmin, async (req: any, res) => {
+    try {
+      const { db } = await import("./db");
+      const data = insertTenantEmpresaSchema.parse({ ...req.body, tenantId: req.tenantId });
+      const rows = await db.insert(tenantEmpresas).values(data).returning();
+      res.status(201).json(rows[0]);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
+  });
+
+  app.patch("/api/empresas/:id", isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const { db } = await import("./db");
+      const { eq, and } = await import("drizzle-orm");
+      const id = parseInt(req.params.id, 10);
+      const rows = await db.update(tenantEmpresas)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(and(eq(tenantEmpresas.id, id), eq(tenantEmpresas.tenantId, req.tenantId)))
+        .returning();
+      if (!rows.length) return res.status(404).json({ message: "Empresa não encontrada" });
+      res.json(rows[0]);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
+  });
 
   // Módulo Societário (Sprint 1 — CRUD base)
   registerSocietarioRoutes(app);

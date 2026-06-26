@@ -5902,3 +5902,39 @@ export type AgentTaskApproval = typeof agentTaskApprovals.$inferSelect;
 export type InsertAgentTaskApproval = z.infer<typeof insertAgentTaskApprovalSchema>;
 export type AgentSkill = typeof agentSkills.$inferSelect;
 export type InsertAgentSkill = z.infer<typeof insertAgentSkillSchema>;
+
+// =====================================================================
+//  EMPRESA-SETUP — Empresas do grupo (Matriz + Filiais)
+// =====================================================================
+
+export const tenantEmpresas = pgTable('tenant_empresas', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: varchar('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  razaoSocial: text('razao_social').notNull(),
+  nomeFantasia: text('nome_fantasia'),
+  cnpj: text('cnpj').notNull(),
+  ie: text('ie'),
+  im: text('im'),
+  email: text('email'),
+  phone: text('phone'),
+  tipo: text('tipo').default('filial'),
+  status: text('status').default('active'),
+  cep: text('cep'),
+  logradouro: text('logradouro'),
+  numero: text('numero'),
+  complemento: text('complemento'),
+  bairro: text('bairro'),
+  cidade: text('cidade'),
+  uf: text('uf').notNull().default('PR'),
+  codigoIbge: text('codigo_ibge'),
+  regimeTributario: text('regime_tributario'),
+  ambienteFiscal: text('ambiente_fiscal').default('homologacao'),
+  serieNfe: integer('serie_nfe').default(1),
+  plusEmpresaId: integer('plus_empresa_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const insertTenantEmpresaSchema = createInsertSchema(tenantEmpresas).omit({ id: true, createdAt: true, updatedAt: true });
+export type TenantEmpresa = typeof tenantEmpresas.$inferSelect;
+export type InsertTenantEmpresa = z.infer<typeof insertTenantEmpresaSchema>;

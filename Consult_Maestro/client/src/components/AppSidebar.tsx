@@ -70,6 +70,7 @@ import { useSystemRole } from "@/hooks/useSystemRole";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getRoleLabel, getSystemRoleLabel } from "@/lib/authUtils";
 import { TenantSwitcher } from "@/components/TenantSwitcher";
+import { EmpresaSelector } from "@/components/EmpresaSelector";
 
 const mainNavItems = [
   { title: "Início", url: "/", icon: LayoutDashboard, module: "dashboard" },
@@ -223,6 +224,10 @@ export function AppSidebar() {
             <TenantSwitcher />
           </div>
         )}
+        {/* Seletor de empresa ativa (visível quando tenant tem 2+ empresas) */}
+        <div className="mt-2">
+          <EmpresaSelector />
+        </div>
       </SidebarHeader>
 
       <SidebarContent className="p-2">
