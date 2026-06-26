@@ -1,0 +1,76 @@
+SPRINT PROD-3 — Relatório Dinâmico do Projeto
+
+Sem schema novo. Lê dados já existentes:
+scrum_internal_projects, scrum_sprints,
+scrum_backlog_items, reunioes_projeto,
+acoes_reuniao, orcamentos_mensais (Control).
+
+SERVER — 1 service + 3 endpoints:
+
+  relatorioProjetoService.ts:
+
+    getRelatorio(tenantId, projetoId):
+      Retorna objeto completo com 5 seções:
+
+      1. visaoGeral:
+         → nome, cliente, fase atual, % conclusão geral
+         → data início, previsão fim, dias restantes
+         → orçamento total, valor pago (fases concluídas)
+         → próximo marco: { label, data, diasRestantes }
+
+      2. sprintAtual:
+         → sprint ativo (status='ativo')
+         → totalTarefas, concluidas, emAndamento, atrasadas
+         → percentual de conclusão
+         → velocidade: tarefas concluídas / semana
+         → impedimentos: tarefas com observação de bloqueio
+
+      3. historicoSprints:
+         → todos os sprints ordenados por numero
+         → por sprint: { numero, titulo, periodo,
+             totalTarefas, concluidas, percentual,
+             status: 'concluido'|'em_andamento'|'atrasado' }
+         → sprint é 'atrasado' quando dataFim < hoje
+           e status != 'concluido'
+
+      4. proximasReunioes:
+         → reunioes_projeto WHERE data >= hoje
+           ORDER BY data LIMIT 5
+         → para cada uma: { numero, data, sprint, pauta }
+
+      5. alertasAgente:
+         → chamar runWithOrchestration com
+           taskType='analise_projeto'
+         → contexto: resumo das 4 seções acima
+         → Agente retorna array de alertas:
+           { nivel: 'critico'|'atencao'|'info',
+             mensagem: string }
+         → Cache de 30min para não chamar IA a cada load
+         → Exemplos de alertas esperados:
+           'Sprint 3 com 40% conclusão — Go-Live N1 em 8 dias'
+           '5 tarefas sem responsável definido'
+           'Reunião de quinta-feira sem pauta gerada'
+
+    exportarXlsx(tenantId, projetoId):
+      → Gera .xlsx no layout exato do template Impacto
+      → Abas com status atual de cada tarefa
+      → Aba Visão Geral com % conclusão por fase
+      → Calendário de reuniões com atas já geradas marcadas
+
+    exportarPdf(tenantId, projetoId):
+      → Gera HTML do relatório
+      → Converte para PDF (usar puppeteer se disponível,
+        senão html-pdf, senão retornar HTML para o browser
+        imprimir via window.print())
+      → Nome do arquivo: relatorio_<projeto>_<data>.pdf
+
+ROUTES — adicionar em server/producao/routes.ts:
+  GET /api/producao/projetos/:id/relatorio
+  GET /api/producao/projetos/:id/relatorio/export/xlsx
+  GET /api/producao/projetos/:id/relatorio/export/pdf
+
+FRONTEND — RelatorioProjeto.tsx (nova página):
+
+  Layout em 2 colunas + full-width onde necessário:
+
+  To

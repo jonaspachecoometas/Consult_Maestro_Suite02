@@ -1,0 +1,52 @@
+PROBLEMA A CORRIGIR — NÃO criar nada novo, só corrigir:
+
+1. SEPARAÇÃO CLARA DE TIPOS NA PÁGINA /producao
+   A página Production.tsx (Projetos em Producao) deve mostrar
+   APENAS projetos com type='external' ou type='internal'.
+   Projetos type='compass' são Demandas — ficam em /demandas.
+
+   Em client/src/pages/Projects.tsx (ou Production.tsx):
+   Filtrar os projetos retornados pela API para exibir
+   SOMENTE onde type !== 'compass'.
+   
+   OU adicionar query param na chamada:
+   GET /api/projects?excludeType=compass
+   
+   E na rota server/routes.ts adicionar:
+   if (req.query.excludeType) {
+     projects = projects.filter(p => p.type !== req.query.excludeType)
+   }
+
+2. CRIAR PROJETO NA CENTRAL DE PRODUÇÃO
+   O botão "Novo Projeto" na Central de Produção deve criar
+   projetos com type='external' por padrão.
+   
+   Em ProjectForm.tsx ou no modal de criação:
+   Garantir que ao criar na rota /producao o campo type
+   seja enviado como 'external', não 'compass'.
+
+3. AGENTE SCRUM NO CONTEXTO CORRETO
+   A análise de documento e geração de projeto (Modo 1 do scrumAgent)
+   só deve ser acionada em projetos type='external' ou type='internal'.
+   
+   No ScrumAgentDialog.tsx: verificar se o projeto atual tem
+   type !== 'compass' antes de permitir análise.
+   Se type === 'compass': mostrar mensagem
+   "Este é uma demanda. Para gerar um projeto Scrum, 
+    aprove a demanda primeiro — isso cria um projeto de produção."
+
+4. VALIDAR O FLUXO COMPLETO:
+   a) Criar projeto type='external' na Central de Produção
+   b) Fazer upload do Book de Requisitos na aba Drive
+   c) Clicar "Analisar com Agente Scrum"
+   d) Confirmar que subprojetos, sprints e PBIs foram criados
+      vinculados ao projeto correto (type='external')
+   e) Abrir aba Subprojetos — ver as fases geradas
+   f) Abrir aba Sprints — ver as sprints geradas
+   g) Abrir aba Calendário — ver as reuniões geradas
+   h) Abrir uma task — aba Agente deve funcionar com contexto
+
+NÃO modificar scrumAgent.ts — está correto.
+NÃO modificar as rotas de produção — estão corretas.
+NÃO modificar o schema — está correto.
+APENAS corrigir o filtro de tipo na listagem e no formulário de criação.

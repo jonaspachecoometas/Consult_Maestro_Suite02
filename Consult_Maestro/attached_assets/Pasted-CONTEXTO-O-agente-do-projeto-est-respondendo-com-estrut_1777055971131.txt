@@ -1,0 +1,124 @@
+CONTEXTO:
+O agente do projeto está respondendo com estrutura proposta
+em texto mas sem botão de ação para aplicar. Além disso,
+precisa consultar o Cérebro e permitir seleção de agentes
+do construtor. Três melhorias em uma sessão.
+
+NÃO MODIFICAR:
+  scrumAgent.ts, apply-plan, construtor de agentes,
+  qualquer funcionalidade existente.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MELHORIA 1 — Botão "Criar projeto completo" no chat
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+O agente já gera estrutura em texto. Falta o botão que
+aplica a estrutura com um clique.
+
+1a. Atualizar o system prompt do agente de projeto para
+    instruir: "Quando propuser uma estrutura de projeto,
+    sempre inclua ao final da resposta um bloco JSON no
+    formato:
+```scrum-plan
+    {
+      subprojetos: [{
+        nome, descricao, dataInicio, dataFim, cor, ordem,
+        sprints: [{
+          nome, dataInicio, dataFim, objetivo,
+          tasks: [{
+            titulo, descricao, responsavel,
+            prioridade, status:'backlog', entregavel
+          }]
+        }]
+      }],
+      reunioes: [{ titulo, data, participantes, pauta }],
+      resumo: {
+        totalSubprojetos, totalSprints, totalTasks,
+        prazoTotal, valorTotal
+      }
+    }
+```
+    Sem texto antes ou depois do bloco JSON."
+
+1b. No frontend do chat do projeto: detectar blocos
+```scrum-plan``` na resposta do agente e renderizar
+    card de aprovação abaixo da mensagem (em vez do JSON):
+
+    ┌──────────────────────────────────────────┐
+    │ 📋 Estrutura proposta pelo agente         │
+    │ X subprojetos · Y sprints · Z tasks       │
+    │ Período: DD/MM → DD/MM/AAAA               │
+    │                                           │
+    │ [Ver detalhes] [✅ Criar projeto completo] │
+    └──────────────────────────────────────────┘
+
+1c. Botão "Criar projeto completo" chama a rota existente:
+    POST /api/projects/:id/drive/apply-plan
+    com o JSON do bloco scrum-plan
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MELHORIA 2 — Consulta ao Cérebro de Conhecimento
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+O agente do projeto precisa buscar no Cérebro antes de
+responder — para usar documentação, requisitos e histórico
+já indexados do tenant.
+
+2a. Habilitar a tool search_brain no agente do projeto.
+    A tool já existe no superAgentService.ts — só precisa
+    ser incluída na lista de tools disponíveis quando o
+    contexto é um projeto.
+
+2b. Adicionar no system prompt do agente de projeto:
+    "Você tem acesso ao Cérebro de Conhecimento deste
+    tenant via tool search_brain. Antes de responder
+    perguntas sobre o projeto, cliente ou requisitos,
+    busque no Cérebro por contexto relevante. Use o
+    resultado para enriquecer sua resposta."
+
+2c. O escopo da busca é o tenant do projeto — não cruzar
+    dados entre tenants (já garantido pelo tenantId).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MELHORIA 3 — Seletor de agente no chat do projeto
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+O consultor pode escolher qual agente usar no projeto —
+Agente Scrum padrão ou qualquer agente criado no
+construtor de agentes do tenant.
+
+3a. No header do chat do projeto adicionar dropdown:
+    "Agente: [Agente Scrum ▼]"
+    
+    Buscar de: GET /api/agents (agentes do tenant,
+    tabela agent_definitions já existente)
+    
+    Primeira opção sempre: "Agente Scrum (padrão)"
+    Demais: agentes do tenant ordenados por nome
+
+3b. O agente selecionado define o system prompt base.
+    O contexto do projeto (nome, subprojetos, sprints,
+    tasks, arquivos) é sempre injetado por cima do
+    system prompt — independente do agente escolhido.
+
+3c. Persistir o agentId escolhido na sessão:
+    Campo agentId já existe em task_agent_sessions —
+    usar o mesmo campo para sessões de projeto.
+    Na próxima vez que abrir o chat do projeto,
+    restaurar o último agente usado.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ORDEM DE ENTREGA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Melhoria 2 primeiro (search_brain) — só backend,
+   sem risco de regressão visual
+
+2. Melhoria 3 (seletor de agente) — frontend pequeno,
+   dropdown no header do chat
+
+3. Melhoria 1 por último (botão criar projeto) —
+   parser de markdown + card de aprovação
+
+Devolver checkpoint após cada melhoria.
+```

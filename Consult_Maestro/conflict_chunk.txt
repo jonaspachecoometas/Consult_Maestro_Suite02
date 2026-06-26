@@ -1,0 +1,45 @@
+<<<<<<< HEAD
+  // Multi-tenant: Tenant operations
+  async getAllTenants(): Promise<Tenant[]> {
+    return await db.select().from(tenants).orderBy(tenants.name);
+=======
+  // Multi-tenant: Tenants
+  async getAllTenants(): Promise<TenantWithRelations[]> {
+    const allTenants = await db.select().from(tenants).orderBy(desc(tenants.createdAt));
+    const result: TenantWithRelations[] = [];
+    for (const t of allTenants) {
+      const userCountResult = await db.select({ count: count() }).from(tenantUsers).where(eq(tenantUsers.tenantId, t.id));
+      const subCountResult = await db.select({ count: count() }).from(tenants).where(eq(tenants.parentTenantId, t.id));
+      let partner: Partner | undefined;
+      if (t.partnerId) {
+        const [p] = await db.select().from(partners).where(eq(partners.id, t.partnerId));
+        partner = p;
+      }
+      result.push({
+        ...t,
+        partner,
+        userCount: Number(userCountResult[0]?.count || 0),
+        subTenantCount: Number(subCountResult[0]?.count || 0),
+      });
+    }
+    return result;
+  }
+
+  async getTenantsByPartner(partnerId: string): Promise<TenantWithRelations[]> {
+    const partnerTenants = await db.select().from(tenants).where(eq(tenants.partnerId, partnerId)).orderBy(desc(tenants.createdAt));
+    const result: TenantWithRelations[] = [];
+    for (const t of partnerTenants) {
+      const userCountResult = await db.select({ count: count() }).from(tenantUsers).where(eq(tenantUsers.tenantId, t.id));
+      const subCountResult = await db.select({ count: count() }).from(tenants).where(eq(tenants.parentTenantId, t.id));
+      result.push({
+        ...t,
+        userCount: Number(userCountResult[0]?.count || 0),
+        subTenantCount: Number(subCountResult[0]?.count || 0),
+      });
+    }
+    return result;
+>>>>>>> 2b61711 (feat: Multi-tenant dashboards for Arcádia Consulting Platform)
+  }
+
+  async getTenant(id: string): Promise<Tenant | undefined> {
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, id));

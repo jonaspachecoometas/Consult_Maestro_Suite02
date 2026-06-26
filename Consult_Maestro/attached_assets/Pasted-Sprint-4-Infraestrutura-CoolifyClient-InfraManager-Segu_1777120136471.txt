@@ -1,0 +1,66 @@
+Sprint 4 — Infraestrutura: CoolifyClient + InfraManager
+
+Seguir o documento arcadia-devcenter-plano-mestre.docx, Sprint 4.
+Depende de: Sprints 1-3 (não tocar).
+
+ENTREGAR:
+
+1. SCHEMA — adicionar em shared/schema.ts:
+   Tabela infra_servers (id, tenantId, name, coolifyUrl,
+   coolifyTokenEnc, serverIp, status, lastPingAt, createdAt)
+   
+   Tabela infra_services (id, serverId, tenantId, coolifyId,
+   name, serviceType, publicUrl, status, clienteId, envVars,
+   createdAt, updatedAt)
+   
+   npx drizzle-kit push após adicionar.
+
+2. SERVER — server/infra/coolifyClient.ts (arquivo novo):
+   Classe CoolifyClient com métodos:
+   getHealth(), listServices(), createService(),
+   startService(), stopService(), getServiceLogs(),
+   updateEnvVars(), listApplications(), deployApplication()
+   
+   Factory getCoolifyClient(tenantId, serverId?) que lê
+   infra_servers do banco e descriptografa o token com
+   cryptoService.decrypt() — mesmo padrão do frappeClient.
+
+3. ROTAS — server/infra/routes.ts (arquivo novo):
+   Importar em server/routes.ts
+   12 rotas conforme o documento:
+   GET/POST /api/infra/servers
+   POST /api/infra/servers/:id/test
+   DELETE /api/infra/servers/:id
+   GET /api/infra/servers/:id/services
+   POST /api/infra/servers/:id/services
+   POST /api/infra/services/:coolifyId/start
+   POST /api/infra/services/:coolifyId/stop
+   GET /api/infra/services/:coolifyId/logs (SSE)
+   PATCH /api/infra/services/:coolifyId/env
+   POST /api/infra/services/:coolifyId/deploy
+   GET /api/infra/servers/:id/applications
+
+4. INTERFACE — client/src/pages/devcenter/InfraManager.tsx:
+   Layout 2 colunas:
+   Esquerda: lista de servidores com ServerCard
+   Direita: serviços do servidor selecionado com ServiceCard
+   
+   ServerCard: nome, IP, contagem de serviços, badge status
+   ServiceCard: ícone por tipo, nome, URL, status (🟢/🔴/🟡)
+                botões: Start | Stop | Logs | Env | Deploy
+   
+   Modal "Adicionar servidor": URL Coolify + API Token
+                               + botão "Testar conexão"
+   
+   ServiceLogs: painel SSE com últimas 200 linhas + auto-scroll
+   
+   EnvEditor: modal com lista key=value editável
+
+5. NAVEGAÇÃO:
+   Link "Infraestrutura" no menu Dev Center
+   Rota /dev-center/infra
+
+NÃO modificar: Sprints 1-3, Central de Produção,
+               qualquer outro módulo existente.
+
+Devolver checkpoint com checklist de validação ao terminar.

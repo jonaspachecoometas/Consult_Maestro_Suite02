@@ -1,0 +1,113 @@
+Sprint 5 — Git: GiteaClient + commit automático + Git viewer
+
+Seguir arcadia-devcenter-plano-mestre.docx, Sprint 5.
+Depende de: Sprints 1-4 (não tocar).
+
+ENTREGAR:
+
+1. server/infra/giteaClient.ts (arquivo novo)
+   Classe GiteaClient com métodos:
+   
+   createRepo(name, description)
+     → POST /api/v1/user/repos
+     → private: true, auto_init: true, default_branch: 'main'
+   
+   commitFile(owner, repo, filePath, content, message, branch?)
+     → Verificar SHA existente antes (GET contents)
+     → PUT se arquivo existe (com sha), POST se novo
+     → content em base64
+   
+   listCommits(owner, repo, branch?)
+     → GET /api/v1/repos/{owner}/{repo}/commits
+   
+   getCommitDiff(owner, repo, sha)
+     → GET /api/v1/repos/{owner}/{repo}/git/commits/{sha}
+     → Retornar array de arquivos com patch
+   
+   createBranch(owner, repo, branchName, fromBranch?)
+     → POST /api/v1/repos/{owner}/{repo}/branches
+   
+   getFileContent(owner, repo, path, branch?)
+     → GET /api/v1/repos/{owner}/{repo}/contents/{path}
+     → Retornar conteúdo decodificado de base64
+   
+   Factory getGiteaClient(tenantId):
+     → Ler URL e token do Gitea em infra_servers
+       onde serviceType = 'gitea'
+     → Mesmo padrão de criptografia do CoolifyClient
+
+2. SCHEMA — adicionar campo em dev_projects (ou tabela que
+   armazena os projetos do Dev Center):
+   gitRepoUrl: varchar('git_repo_url') nullable
+   
+   npx drizzle-kit push
+
+3. INTEGRAÇÃO no orchestrator — server/ide/orchestrator.ts
+   Adicionar em executeDeploy() APÓS deploy bem-sucedido:
+   
+   a) Criar ou reutilizar repositório do projeto
+      repoName = 'project-' + projectId
+      try { await gitea.createRepo(repoName, designDoc.summary) }
+      catch {} // idempotente — não falha se já existe
+   
+   b) Commitar cada artefato gerado:
+      Para cada doctype:
+        gitea.commitFile('arcadia', repoName,
+          'doctypes/{name}.json', doctype.json,
+          'feat(doctype): {name} — Agente Developer')
+      
+      Para cada server_script:
+        gitea.commitFile('arcadia', repoName,
+          'scripts/{name}.py', script.code,
+          'feat(script): {name} — QA PASS')
+      
+      Design Doc:
+        gitea.commitFile('arcadia', repoName,
+          'docs/design-doc.json',
+          JSON.stringify(designDoc, null, 2),
+          'docs: Design Document — ' + designDoc.summary)
+   
+   c) Salvar gitRepoUrl no projeto:
+      db.update(devProjects)
+        .set({ gitRepoUrl: GITEA_URL + '/arcadia/' + repoName })
+   
+   d) Se Gitea não configurado: silencioso — não quebrar o deploy
+
+4. ROTAS — adicionar em server/infra/routes.ts:
+   GET /api/ide/projects/:projectId/git/commits
+     → GiteaClient.listCommits()
+   GET /api/ide/projects/:projectId/git/commits/:sha/diff
+     → GiteaClient.getCommitDiff()
+   POST /api/ide/projects/:projectId/git/branches
+     → GiteaClient.createBranch()
+
+5. INTERFACE — nova aba 'Git' na página do projeto Dev Center
+   client/src/components/devcenter/GitViewer.tsx (arquivo novo)
+   
+   Layout 2 colunas:
+   
+   Esquerda — lista de commits:
+     Seletor de branch (dropdown)
+     Botão '+ Nova branch'
+     Lista: ● hash | mensagem | autor | data relativa
+     Clicar → carrega diff na coluna direita
+   
+   Direita — diff do commit selecionado:
+     Header: mensagem completa + autor + data + hash
+     Por arquivo: nome + +N linhas / -N linhas
+     Diff colorido:
+       linha com + → fundo verde claro
+       linha com - → fundo vermelho claro
+       linhas de contexto → fundo neutro
+     Botão 'Reverter este commit'
+       → cria novo commit que desfaz as mudanças
+       → NÃO reescreve histórico (seguro)
+   
+   Se gitRepoUrl não existe no projeto:
+     Mostrar mensagem: 'Faça o primeiro deploy para
+     criar o repositório automaticamente'
+
+NÃO modificar: Sprints 1-4, Central de Produção,
+               qualquer outro módulo.
+
+Devolver checkpoint com checklist de validação.

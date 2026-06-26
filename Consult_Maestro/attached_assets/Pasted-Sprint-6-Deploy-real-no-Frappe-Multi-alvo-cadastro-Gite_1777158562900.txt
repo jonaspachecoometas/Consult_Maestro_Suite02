@@ -1,0 +1,121 @@
+Sprint 6 — Deploy real no Frappe + Multi-alvo + cadastro Gitea na UI
+
+Seguir arcadia-devcenter-plano-mestre.docx, Sprint 6.
+Depende de: Sprints 1-5 (não tocar).
+
+PARTE 0 — Cadastro do Gitea pela UI (rápido, antes do Sprint 6)
+
+No modal de provisionamento da InfraManager:
+  Adicionar tipo 'gitea' na lista de service types
+  Quando service_type = 'gitea': campos extras:
+    URL do Gitea (ex: https://git.meuservidor.com.br)
+    Token de acesso do Gitea (admin token)
+  Salvar em infra_servers com service_type = 'gitea'
+  Assim o getGiteaClient() encontra via query normal
+
+PARTE 1 — Deploy real no Frappe
+
+Substituir o deploy simbólico pelo real em:
+  server/ide/orchestrator.ts — função executeDeploy()
+
+1. GUARDRAIL obrigatório (bloquear no servidor):
+   const FRAPPE_CORE_DOCTYPES = [
+     'Sales Invoice','Customer','Item','Purchase Order',
+     'Journal Entry','Employee','Company','User',
+     'Account','Stock Entry','Delivery Note','Purchase Receipt'
+   ]
+   Para cada doctype em codeOutput.doctypes:
+     Se nome está na lista → retornar erro 400 com mensagem:
+     '{nome} é DocType core do Frappe. Use Custom App.'
+
+2. Verificar se tenant tem Frappe configurado:
+   getFrappeClient(tenantId) → se não configurado:
+   retornar erro 400: 'Frappe não configurado para este tenant.
+   Configure em Configurações → Integrações → Frappe.'
+
+3. Deploy de cada DocType:
+   await frappeClient.createDoc('DocType',
+     JSON.parse(doctype.json))
+
+4. Deploy de cada Server Script:
+   await frappeClient.createDoc('Server Script', {
+     name: script.name,
+     script_type: 'DocType Event',
+     reference_doctype: script.doctype,
+     doctype_event: script.event,
+     script: script.code,
+   })
+
+5. Clear cache após deploy:
+   await frappeClient.call(
+     'frappe.client.run_doc_method', {
+     method: 'clear_cache'
+   })
+
+6. Registrar em devDeployLogs:
+   status: 'success' | 'failed'
+   deployedAt: timestamp
+   frappeResponse: JSON do resultado
+
+7. Se deploy falhar → handleDeployError() existente
+   Loop automático Dev→QA→deploy (max 2 tentativas)
+
+8. Após deploy real bem-sucedido:
+   Indexar no Cérebro:
+   brainService.indexDocument(tenantId, {
+     title: 'Módulo: ' + designDoc.summary,
+     content: JSON.stringify(codeOutput),
+     category: 'erp_tecnico',
+     sourceType: 'ide_deploy',
+     sourceId: run.id,
+   })
+
+PARTE 2 — Seletor de alvo (Multi-alvo)
+
+No Copilot (IDEPanel.tsx), antes do campo de requisito:
+  'Onde será deployado?'
+  [📦 Frappe/ERPNext]    ← padrão, já implementado
+  [⚡ Arcádia Suite]
+  [🔧 Arcádia Consult]
+  [🌐 Sistema standalone]
+  [📋 Clonar e refatorar]
+
+Enviar target no body de POST /api/ide/runs
+O orchestrator usa system prompt do Arquiteto por alvo:
+
+ARCHITECT_FRAPPE_PROMPT   → já existe (usar o atual)
+ARCHITECT_SUITE_PROMPT    → Node.js/TS, Drizzle, padrões Suite
+ARCHITECT_CONSULT_PROMPT  → Node.js/TS, React, padrões Consult
+ARCHITECT_STANDALONE_PROMPT → FastAPI ou Express, Dockerfile
+ARCHITECT_GIT_PROMPT      → clone + análise + diff
+
+Para Suite e Consult: o Arquiteto recebe contexto extra:
+  Tool read_repo_file(path) que lê via GiteaClient
+  Para entender o código existente antes de gerar
+
+Para standalone: Desenvolvedor gera Dockerfile também
+Para clone/refatorar: Arquiteto lê repo informado pelo usuário
+
+PARTE 3 — Feedback visual no deploy real
+
+No painel Pipeline (direita):
+  Fase 'Deploy' mostra progresso real:
+  ⟳ Verificando guardrails...
+  ⟳ Conectando ao Frappe...
+  ⟳ Criando DocType {nome}...
+  ✓ DocType {nome} criado
+  ⟳ Criando Server Script {nome}...
+  ✓ Server Script {nome} criado
+  ⟳ Limpando cache...
+  ✓ Deploy concluído
+  
+  Link direto: 'Abrir {DocType} no Frappe →'
+    → frappeUrl + /app/{doctype-slug}
+  
+  Se falhou: badge vermelho + mensagem do erro do Frappe
+    + botão 'Tentar novamente'
+
+NÃO modificar: Sprints 1-5, Central de Produção,
+               qualquer outro módulo.
+
+Devolver checkpoint com checklist de validação.

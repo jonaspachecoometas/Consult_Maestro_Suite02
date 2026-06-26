@@ -1,0 +1,54 @@
+ Antes de construir o Super Agente contextual, criar o lugar onde cada tenant configura sua própria chave de IA.
+É uma tela pequena mas estratégica — sem ela o agente da agência usa a chave da Arcádia, o que não é o modelo correto.
+
+O que criar
+Uma seção em Minha Empresa → IA & Modelos com:
+┌─────────────────────────────────────────┐
+│  IA & Modelos                           │
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │ 🤖 Anthropic Claude             │    │
+│  │ API Key: ••••••••••••  [Editar] │    │
+│  │ Modelo: claude-sonnet-4-5       │    │
+│  │ Status: ✅ Conectado            │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │ ✨ Google Gemini                │    │
+│  │ API Key: não configurada        │    │
+│  │ [Configurar]                    │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │ 🌙 Kimi (Moonshot)              │    │
+│  │ API Key: não configurada        │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │ 🏠 Ollama (local)               │    │
+│  │ URL: não configurada            │    │
+│  │ Nota: dados ficam no servidor   │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  Sem chave configurada = usa o          │
+│  provider padrão da plataforma          │
+└─────────────────────────────────────────┘
+
+O que o Replit Agent precisa fazer
+É a Opção C da Fase 1 do doc Multi-Provider AI — só o schema e a UI de configuração, sem migrar os agentes ainda:
+1. Schema: tabela tenant_ai_configs
+   → tenantId, provider, apiKeyEnc (criptografada), model, isActive
+   → Usar o cryptoService existente para criptografar
+
+2. Rotas:
+   → GET  /api/ai/config  (lista configs sem expor a key)
+   → POST /api/ai/config  (salvar/atualizar)
+   → POST /api/ai/config/test (testar conexão)
+
+3. UI: aba "IA & Modelos" em Minha Empresa
+   → Card por provider
+   → Campo de API Key (type=password, nunca mostra o valor salvo)
+   → Botão Testar conexão
+   → Badge Conectado / Usando padrão da plataforma
+Isso desbloqueia o Super Agente contextual usar a chave do tenant, e já abre as portas para o multi-provider completo depois.
+Confirma para o Replit Agent seguir com isso antes da Fase 3?

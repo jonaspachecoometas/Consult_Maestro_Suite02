@@ -1,0 +1,173 @@
+Sprint 8 — Prompt Engineering Studio
+
+Seguir arcadia-devcenter-plano-mestre.docx, Sprint 8.
+Depende de: Sprints 1-7 (não tocar).
+
+OBJETIVO:
+Permitir que o consultor construa, teste e otimize
+os system prompts dos agentes com auxílio do próprio
+Claude — que analisa o prompt atual e sugere melhorias
+com score 0-100, lista de issues e versão otimizada.
+
+SCHEMA — adicionar em shared/schema.ts:
+
+export const promptVersions = pgTable('prompt_versions', {
+  id:           varchar('id').primaryKey()
+                  .default(sql`gen_random_uuid()`),
+  tenantId:     varchar('tenant_id').notNull(),
+  // 'architect'|'developer'|'qa'|'devops'|custom
+  agentType:    varchar('agent_type',{length:50}).notNull(),
+  versionName:  varchar('version_name',{length:100}),
+  systemPrompt: text('system_prompt').notNull(),
+  changeNotes:  text('change_notes'),
+  testScore:    integer('test_score'),   // 0-100
+  isActive:     integer('is_active').default(0),
+  createdById:  varchar('created_by_id')
+                  .references(()=>users.id),
+  createdAt:    timestamp('created_at').defaultNow(),
+}, (t)=>[
+  index('idx_pv_tenant_agent').on(t.tenantId, t.agentType),
+]);
+
+npx drizzle-kit push após adicionar.
+
+SEED — ao criar a tabela, inserir versões iniciais
+dos 4 agentes do pipeline como isActive=1:
+  architect, developer, qa, devops
+  Usar os system prompts que já existem em
+  server/ide/prompts.ts como conteúdo inicial.
+
+ROTAS — server/ide/promptRoutes.ts (arquivo novo):
+
+GET  /api/ide/prompts
+  → lista versões por agentType do tenant
+  → query param: ?agentType=architect
+
+POST /api/ide/prompts
+  → salvar nova versão
+  → body: { agentType, versionName, systemPrompt,
+            changeNotes }
+  → retornar id da versão criada
+
+POST /api/ide/prompts/:id/activate
+  → marcar isActive=1 esta versão
+  → marcar isActive=0 todas as outras do mesmo agentType
+  → a partir daí o orchestrator usa este prompt
+
+POST /api/ide/prompts/:id/test
+  → body: { testInput: string }
+  → rodar o agente com este prompt + testInput
+  → retornar: { output, tokensUsed, durationMs, model }
+  → usar aiComplete() com o modelo atual do tenant
+
+POST /api/ide/prompts/optimize
+  → body: { promptId: string }
+  → Claude analisa o prompt e retorna JSON:
+    {
+      score: 0-100,
+      strengths: string[],
+      issues: [{
+        category: 'identidade'|'instrucoes'|
+                  'formato'|'guardrails'|'exemplos',
+        severity: 'critico'|'alto'|'medio'|'baixo',
+        problem: string,
+        fix: string
+      }],
+      optimized_prompt: string,
+      change_summary: string
+    }
+  → system prompt do Otimizador:
+    'Você é especialista em Prompt Engineering para LLMs.
+     Analise o system prompt fornecido e retorne APENAS
+     JSON válido sem markdown. Avalie:
+     1. Clareza de identidade do agente
+     2. Especificidade das instruções (evitar verbos vagos)
+     3. Formato de output definido explicitamente
+     4. Guardrails — o que NÃO fazer está claro?
+     5. Exemplos de input/output presentes?
+     Score 0-100 baseado nesses 5 critérios.'
+
+POST /api/ide/prompts/compare
+  → body: { promptIdA, promptIdB, testInput }
+  → rodar ambos em paralelo (Promise.all)
+  → retornar: { outputA, outputB, tokensA, tokensB }
+
+INTEGRAÇÃO no orchestrator:
+  Ao rodar cada fase do pipeline, verificar se existe
+  versão isActive=1 para o agentType do tenant.
+  Se sim: usar esse prompt em vez do default de prompts.ts
+  Se não: usar o default (comportamento atual mantido)
+
+INTERFACE — /dev-center/prompts:
+
+Rota: /dev-center/prompts
+Link 'Prompt Studio' no menu Dev Center
+Componente: client/src/pages/devcenter/PromptStudio.tsx
+
+LAYOUT 3 PAINÉIS lado a lado:
+
+PAINEL ESQUERDO — Editor (w-1/3):
+  Dropdown seletor de agente:
+    Arquiteto / Desenvolvedor / QA / DevOps / custom
+  
+  Lista de versões do agente selecionado:
+    Cada versão: nome | data | score | badge 'ativo'
+    Botão '+ Nova versão'
+    Clicar na versão → carrega no editor
+  
+  Textarea do system prompt (grande, fonte mono)
+  
+  Linha de ações:
+    [Salvar versão] [Ativar esta versão] [Analisar com IA]
+
+PAINEL CENTRAL — Testador (w-1/3):
+  Label: 'Testar prompt'
+  Textarea: requisito de teste
+    placeholder: 'Ex: Crie um DocType para registrar
+    comissões de vendedores...'
+  Dropdown: modelo a usar (Claude Sonnet / Haiku / etc)
+  Botão [Testar prompt]
+  
+  Resultado:
+    Output do agente (área scrollável)
+    Métricas: tokens usados | tempo | modelo
+  
+  Linha inferior:
+    [Comparar A/B] → abre modal com seletor de versão B
+
+PAINEL DIREITO — Assistente IA (w-1/3):
+  Título: 'Análise do prompt'
+  Botão [Analisar] (ou dispara ao clicar no editor)
+  
+  Quando analisado:
+    Score: barra visual 0-100 com cor (verde/amarelo/vermelho)
+    
+    Pontos fortes (collapsível):
+      Lista de strengths
+    
+    Problemas identificados:
+      Badge por severidade (crítico=vermelho, alto=laranja,
+      médio=amarelo, baixo=cinza)
+      Por issue: category | problem | fix sugerido
+    
+    Prompt otimizado (collapsível):
+      Textarea read-only com o prompt sugerido
+      Botão [Aplicar sugestão]
+        → copia o prompt otimizado para o editor
+      Botão [Ver diferença]
+        → diff visual: original vs otimizado
+          linhas removidas em vermelho
+          linhas adicionadas em verde
+
+MODAL Comparar A/B:
+  Seletor: Versão B (dropdown com versões do agente)
+  Input de teste compartilhado
+  Botão [Comparar]
+  Side-by-side: Output A | Output B
+  Métricas de cada lado
+  Botão [Ativar A] ou [Ativar B]
+
+NÃO modificar: Sprints 1-7, Central de Produção,
+               qualquer outro módulo.
+
+Devolver checkpoint com checklist de validação.

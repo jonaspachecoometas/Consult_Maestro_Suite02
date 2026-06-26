@@ -1,0 +1,118 @@
+Você é um engenheiro full-stack sênior. Este projeto NÃO pode depender do Replit fora do ambiente do Replit. O Replit será usado apenas como IDE/ambiente de desenvolvimento, mas o sistema deve rodar em qualquer servidor (Docker/VM/VPS) usando apenas ENV vars e Postgres.
+
+Objetivo
+
+Implementar autenticação dual-mode e portável:
+
+OIDC Auth0 (login social/SSO via Authorization Code Flow).
+
+Auth local (“puro”) com e-mail + senha no Postgres.
+
+Ambos devem alimentar o mesmo mecanismo de sessão (cookie-based session) no backend.
+
+Proibições (crítico)
+
+Não usar Replit Auth (nem replit-auth, @replit/*, headers específicos, REPL_ID como requisito, callbacks dependentes do Replit, ou qualquer SDK exclusivo).
+
+Não usar URLs hardcoded do Replit. Tudo deve usar APP_BASE_URL e OIDC_CALLBACK_PATH.
+
+Não assumir que o app sempre roda por trás do proxy do Replit.
+
+Variáveis de ambiente (usar exatamente)
+
+POSTGRES_PASSWORD=bcprime2025
+DATABASE_URL=postgresql://arcadia_user:bcprime2025@postgres:5432/arcadia_consulting
+SESSION_SECRET=ec4a8e5ac49f527ada6b3a4da6...
+ISSUER_URL=https://dev-bmp10geatsn7e325.us.auth0.com
+
+OIDC_CLIENT_ID=lnUECtcylnbkcR8UztfpSopDzx8dIOia
+OIDC_CLIENT_SECRET=UKTebKK_ONVozkEHNuyxsCkM...
+APP_BASE_URL=https://consult.arcadiabusiness.com.br
+
+OIDC_CALLBACK_PATH=/api/callback
+OIDC_SCOPES=openid email profile
+PORT=5000
+NODE_ENV=production
+
+Requisitos técnicos (portabilidade)
+
+Back-end deve montar redirect_uri sempre como: ${APP_BASE_URL}${OIDC_CALLBACK_PATH}.
+
+Respeitar trust proxy quando necessário (para cookies secure atrás de proxy), mas sem depender do Replit.
+
+Cookies de sessão:
+
+httpOnly: true
+
+secure: true em produção
+
+sameSite compatível com OIDC (use configuração segura que funcione com redirect)
+
+CORS e cookies devem funcionar com o domínio real definido em APP_BASE_URL.
+
+Endpoints mínimos
+
+OIDC (Auth0):
+
+GET /api/login/oidc inicia fluxo OIDC
+
+GET /api/callback trata retorno, valida, cria sessão e upsert do usuário
+
+POST /api/logout limpa sessão e, se aplicável, redireciona para logout do Auth0
+
+Local (“puro”):
+
+POST /api/auth/register
+
+POST /api/auth/login
+
+GET /api/auth/me
+
+POST /api/logout (mesmo endpoint acima)
+
+Banco de dados
+
+Criar/ajustar tabela users (se não existir):
+
+id
+
+email (unique, nullable para alguns provedores se necessário)
+
+password_hash (nullable para OIDC-only)
+
+name
+
+provider (local|oidc)
+
+provider_sub (nullable)
+
+timestamps
+Garantir upsert por provider_sub (OIDC) e/ou email.
+
+UI
+
+Tela de login com:
+
+Botão “Entrar com Auth0”
+
+Form e-mail/senha + registro
+
+Rotas privadas exigem sessão; se não logado, redireciona pra login.
+
+Front chama /api/auth/me para validar sessão.
+
+Entrega e validação
+
+Implementar tudo de ponta a ponta.
+
+Incluir no README:
+
+como rodar fora do Replit (ex.: npm run build + npm start ou Docker)
+
+exemplo de .env
+
+checklist para Auth0: Allowed Callback URLs / Allowed Logout URLs usando APP_BASE_URL
+
+Criar um “smoke test” manual: passos para testar login OIDC e login local.
+
+Comece mapeando onde hoje estão: session middleware, rotas /api/*, e o fluxo atual do OIDC. Depois implemente a autenticação dual-mode com o mínimo de mudanças necessárias, mantendo o código limpo e sustentável.

@@ -1,0 +1,481 @@
+1. Objetivo do Módulo Scrum (Central de Produção)
+
+Criar um módulo interno para gestão da produção da consultoria, responsável por:
+
+Concentrar todas as demandas técnicas e de consultoria (tarefas, requisitos, tickets de suporte, melhorias internas).
+
+Organizar o trabalho em backlog + sprints, seguindo o Scrum original.
+
+Controlar agenda, capacidade e custo de produção da equipe (consultores, suporte, devs, terceiros).
+
+Medir tempo gasto, custo/hora, taxa de entrega e retrabalho.
+
+Gerar relatórios, mapas críticos e cronogramas da operação.
+
+Importante: aqui o foco é interno, na produção da consultoria – não é a visão do cliente, e sim da “fábrica” da Arcádia.
+
+2. Fontes de demanda do Módulo Scrum
+
+O módulo Scrum recebe demandas de:
+
+Módulo Tarefas
+
+Tarefas associadas a projetos de clientes.
+
+Tarefas internas de melhoria.
+
+Módulo Requisitos
+
+Requisitos aprovados (funcionais, técnicos, consultivos).
+
+Módulo Suporte
+
+Tickets marcados como “precisa de atenção” → alimentam o Backlog.
+
+Criação direta no Módulo Scrum
+
+Demandas internas (melhorias de processo, documentação, ajustes internos).
+
+3. Botão padrão: “Gerar Scrum” em todos os módulos
+
+Em cada módulo de origem (Tarefas, Requisitos, Suporte, PDCA, Processos, Projetos do Cliente) deve existir um botão:
+
+[Gerar item de Scrum]
+
+3.1. Comportamento do botão
+
+Ao clicar:
+
+Abre um formulário de criação de Item de Backlog (PBI) já pré-preenchido com:
+
+Origem: módulo + ID do registro.
+
+Projeto do Cliente: se existir.
+
+Cliente: se existir.
+
+Descrição base: título/descrição da tarefa/requisito/ticket.
+
+Tipo sugerido:
+
+Requisito → Feature/História
+
+Bug do suporte → Bug
+
+Tarefa → Task
+
+Prioridade sugerida: mapeada da prioridade do módulo de origem.
+
+Anexos/links trazidos junto.
+
+Permite editar/ajustar:
+
+Tipo, prioridade, story points, responsável sugerido, sprint (se já for alocado).
+
+Ao salvar:
+
+Cria o Item de Backlog no módulo Scrum.
+
+Mantém o link de referência com o registro de origem.
+
+4. Estrutura de Dados (Entidades principais)
+4.1. Projeto Interno de Produção
+
+É a “cópia operacional” dos projetos de cliente dentro da fábrica.
+
+Campos principais:
+
+Código do Projeto Interno
+
+Nome
+
+Cliente (link)
+
+Projeto do Cliente (link)
+
+Tipo: Consultoria / Desenvolvimento / Híbrido
+
+Responsável (Delivery Manager / Coordenador)
+
+Status: Planejado / Em Execução / Pausado / Encerrado
+
+Centro de custo
+
+Data de início / previsão de fim
+
+Contrato / pacote de horas associado (opcional)
+
+4.2. Item de Backlog (PBI – Product Backlog Item)
+
+Campos principais:
+
+Código do PBI
+
+Título
+
+Descrição detalhada
+
+Tipo:
+
+Épico
+
+Feature
+
+História
+
+Task
+
+Bug
+
+Suporte
+
+Interno
+
+Retrabalho
+
+Origem: Tarefa / Requisito / Suporte / Interno / PDCA / Processo
+
+ID da Origem (link)
+
+Projeto Interno (link)
+
+Cliente / Projeto do Cliente (para referência, sem expor ao cliente)
+
+Prioridade: Baixa / Média / Alta / Crítica
+
+Story Points (esforço)
+
+SLA (se vier de suporte)
+
+Critérios de aceite
+
+Responsável principal
+
+Time/Squad
+
+Sprint (se já alocado)
+
+Status:
+
+Backlog
+
+Selecionado para Sprint
+
+Em Execução
+
+Em Revisão
+
+Aguardando Validação
+
+Concluído
+
+Bloqueado
+
+Cancelado
+
+Campo “É Expedite?” (para itens urgentes que furam a fila)
+
+Tags (consultivo, fiscal, ERP, integração, documentação etc.)
+
+4.3. Sprint
+
+Campos principais:
+
+Código da Sprint
+
+Nome/Identificação (ex: Sprint 2025-03 – Time A)
+
+Time/Squad
+
+Data de início
+
+Data de fim
+
+Meta da sprint
+
+Capacidade da sprint (em horas e/ou story points)
+
+Status: Planejada / Ativa / Encerrada / Cancelada
+
+Cutoff de escopo (data a partir da qual não entra item novo normal)
+
+Observações
+
+4.4. Time / Squad
+
+Campos:
+
+Nome do time/squad
+
+Tipo de time: Desenvolvimento / Consultoria / Suporte / Misto
+
+Membros (lista)
+
+Pessoa
+
+Função (Dev, Consultor, Suporte, QA, Arquiteto, Terceiro)
+
+Custo/hora
+
+Carga horária semanal
+
+Disponibilidade (agenda básica)
+
+Centro(s) de custo associado(s)
+
+4.5. Agenda / Calendário da Equipe
+
+Objetivo: permitir gestão de agenda da equipe como um todo.
+
+Campos / funções:
+
+Compromissos (reuniões, workshops, visitas, sessões remotas)
+
+Alocação de PBIs (quando previsto executar)
+
+Visualização:
+
+Por membro
+
+Por time
+
+Por projeto interno
+
+Integração com timesheets: o que foi planejado vs o que foi apontado.
+
+4.6. Apontamento de Tempo (Timesheet / Worklog)
+
+Campos:
+
+PBI
+
+Pessoa
+
+Data
+
+Hora início e hora fim (ou duração direta)
+
+Total de minutos/horas
+
+Tipo de atividade:
+
+Produção
+
+Análise
+
+Reunião
+
+Retrabalho
+
+Documentação
+
+Gestão/Coordenação
+
+Centro de custo (herdado do projeto interno, mas editável)
+
+Custo calculado (tempo x custo/hora da pessoa)
+
+Observações
+
+4.7. Retrabalho
+
+Pode ser um tipo especial de PBI ou registro vinculado ao PBI original.
+
+Campos:
+
+PBI original (link)
+
+PBI de retrabalho (opcional)
+
+Motivo do retrabalho:
+
+Falha de requisito
+
+Erro de desenvolvimento
+
+Erro de consultor/configuração
+
+Mudança de escopo não formalizada
+
+Falha de comunicação com cliente
+
+Tempo gasto em retrabalho (somado de timesheets)
+
+Custo do retrabalho
+
+Responsáveis
+
+Observações / causa raiz (texto)
+
+5. Fluxos de Trabalho (Workflows)
+5.1. fluxo de entrada no Backlog
+
+Tarefa / requisito / ticket de suporte é criado no módulo de origem.
+
+Usuário (ou regra automatizada no suporte) dispara “Gerar Scrum”.
+
+PBI é criado com status = Backlog.
+
+PO interno / coordenador faz triagem:
+
+Ajusta prioridade, tipo, projeto interno e story points.
+
+Opcionalmente já coloca na próxima sprint.
+
+5.2. Planejamento de Sprint
+
+Coordenador abre tela de Planejamento de Sprint:
+
+Lista Backlog por projeto/cliente/prioridade.
+
+Capacidade do time (em horas/pontos) é exibida.
+
+Arrasta/seleciona itens do backlog para a nova Sprint.
+
+Define meta da sprint.
+
+Confirma e ativa sprint (status = “Ativa”).
+
+5.3. Execução do Trabalho
+
+Quadro Scrum (Kanban) com colunas:
+
+Backlog da Sprint
+
+Em Execução
+
+Em Revisão
+
+Aguardando Validação
+
+Concluído
+
+Bloqueado
+
+Cada membro:
+
+Move PBI no quadro.
+
+Aponta tempo (timesheet) vinculado ao PBI.
+
+Sistema:
+
+Atualiza progresso da sprint (burndown, carga de trabalho).
+
+Marca itens que estão “parados” há muito tempo em certa coluna.
+
+5.4. Encerramento da Sprint
+
+Coordenador encerra sprint:
+
+Marca PBIs concluídos.
+
+Opção de “carregar” PBIs não concluídos para o backlog ou próxima sprint.
+
+Sistema registra:
+
+Velocity (pontos entregues).
+
+Tempo total consumido.
+
+Retrabalho.
+
+Gera relatórios automáticos da sprint.
+
+6. Relatórios e Mapas que o módulo deve gerar
+6.1. Mapas críticos e execução
+
+Mapa de gargalos por coluna: onde os itens travam mais (Em Execução, Revisão etc.).
+
+Mapa de itens bloqueados: lista de PBIs bloqueados, motivo e tempo de bloqueio.
+
+Mapa de risco de atraso:
+
+Itens perto do fim da sprint ainda não concluídos.
+
+Itens acima do cycle time médio.
+
+6.2. Cronogramas
+
+Visão Gantt:
+
+Por projeto interno
+
+Por sprint
+
+Por cliente
+
+Cronograma vs real:
+
+Previsão inicial x datas reais de conclusão.
+
+6.3. Tempos gastos e produtividade
+
+Tempo por PBI, por sprint, por projeto, por cliente.
+
+Tempo por pessoa, por função, por time.
+
+Tempo por tipo de atividade (produção, retrabalho, reunião, gestão).
+
+Lead time (pedido até entrega) e cycle time (início até conclusão).
+
+6.4. Custos de produção
+
+Custo por PBI.
+
+Custo por sprint.
+
+Custo por projeto interno.
+
+Custo total por cliente/contrato.
+
+Comparativo: custo estimado x custo real.
+
+6.5. Taxas de entrega e retrabalho
+
+Taxa de entrega dentro da sprint (itens concluídos x planejados).
+
+Taxa de retrabalho:
+
+% de tempo da equipe gasto com retrabalho.
+
+Retrabalho por causa raiz.
+
+% de tickets de suporte que viraram retrabalho de implementação.
+
+7. Perfis de acesso
+
+Admin / Gestor Geral: tudo.
+
+Coordenador / PO interno:
+
+Triagem do backlog.
+
+Planejamento de sprint.
+
+Encerramento de sprint.
+
+Acesso a relatórios de custo.
+
+Scrum Master / Facilitador:
+
+Gerencia board, WIP e impedimentos.
+
+Executor (Consultor / Dev / Suporte / Terceiro):
+
+Visualiza suas tarefas.
+
+Move cards no board.
+
+Aponta horas.
+
+Financeiro / Controladoria:
+
+Define custos/hora.
+
+Acessa relatórios de custo e rentabilidade.
+
+8. Resumo em uma frase (pra documentar no sistema)
+
+Módulo Scrum – Central de Produção Arcádia Consult
+Módulo interno que centraliza todas as demandas da consultoria (tarefas, requisitos, suporte, melhorias), organiza em backlog e sprints, controla agenda e capacidade da equipe, registra tempo e custos de produção, e gera indicadores de entrega, retrabalho e rentabilidade por projeto, cliente e time

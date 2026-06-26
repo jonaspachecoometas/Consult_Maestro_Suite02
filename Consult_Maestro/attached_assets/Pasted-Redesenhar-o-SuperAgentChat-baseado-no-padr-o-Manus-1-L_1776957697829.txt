@@ -1,0 +1,58 @@
+Redesenhar o SuperAgentChat baseado no padrão Manus:
+
+1. LAYOUT DE TRÊS COLUNAS
+   Coluna esquerda (sidebar):
+   → Lista de sessões agrupadas por cliente/projeto
+   → Botão "Nova conversa" no topo
+   → Busca no histórico
+   → Seção "Arquivos" (biblioteca de uploads)
+
+   Coluna central (área da tarefa):
+   → Steps visíveis em tempo real durante execução
+     Exemplo:
+     ⟳ Lendo arquivo Book_Requisitos.pdf...
+     ✓ 25 requisitos identificados
+     ⟳ Criando projeto no Scrum...
+     ✓ Projeto criado: Suite Impacto Fase 1
+     ⟳ Criando tasks...
+     ✓ 18 tasks criadas em 3 sprints
+   → Artefatos gerados aparecem como cards
+     (projeto criado, tasks criadas, documento gerado)
+   → Status final: "Tarefa concluída" com resumo
+
+   Input na base:
+   → Campo de texto
+   → Botão de upload de arquivos (PDF, DOCX, XLSX, CSV, ZIP)
+   → Botão de habilidades (tools disponíveis)
+   → Enviar
+
+2. STEPS EM TEMPO REAL (SSE)
+   → Endpoint: GET /api/super-agent/sessions/:id/stream
+   → Emite eventos enquanto o agente executa as tools
+   → Frontend escuta e renderiza cada step ao vivo
+   → Mesmo padrão do SSE já usado no A2A do Suite
+
+3. UPLOAD + ANÁLISE (conforme instrução anterior)
+   → POST /api/super-agent/upload
+   → Extração de texto: pdf-parse, mammoth, xlsx
+   → Tool read_attachment disponível para o agente
+   → Arquivo salvo em project_files vinculado ao projeto
+
+4. TOOLS DE CRIAÇÃO (conforme instrução anterior)
+   → create_demand
+   → create_project_with_tasks
+   → create_tasks_from_requirements
+   → create_sprint
+
+5. ARTEFATOS VISÍVEIS
+   → Quando agente cria projeto → card aparece na conversa
+     com link direto para o projeto
+   → Quando cria tasks → card com contador
+     "18 tasks criadas — ver no projeto"
+   → Quando gera documento → card com download
+
+NÃO alterar:
+   → SuperAgentFloating (botão flutuante global)
+   → SuperAgentEmbed (embed contextual nos projetos)
+   → As 4 tools existentes (list_projects, etc.)
+   → As rotas REST existentes

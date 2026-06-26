@@ -1,0 +1,134 @@
+Sprint 7 — Wizard de Onboarding
+servidor → Coolify → Gitea → Frappe em 5 passos
+
+Seguir arcadia-devcenter-plano-mestre.docx, Sprint 7.
+Depende de: Sprints 1-6 (não tocar).
+
+OBJETIVO:
+Guiar o parceiro revendedor (BCPrime, agências) desde
+a conexão do servidor até o primeiro site Frappe
+provisionado para um cliente — sem nenhum conhecimento
+técnico. Zero terminal.
+
+ROTA E PÁGINA:
+  /dev-center/onboarding
+  Link 'Configurar novo servidor' no menu Dev Center
+  Componente: client/src/pages/devcenter/OnboardingWizard.tsx
+
+OS 5 PASSOS:
+
+PASSO 1 — Conectar servidor Coolify
+  Campo: URL do Coolify (ex: https://coolify.servidor.com.br)
+  Campo: API Token do Coolify
+  Botão 'Testar conexão' → POST /api/infra/servers/test-connection
+    (teste sem salvar — só valida)
+  Se OK: badge verde 'Conexão estabelecida' → botão Próximo
+  Se falhou: mensagem específica (timeout, auth, SSRF)
+  
+  Ao confirmar: POST /api/infra/servers (salva o servidor)
+
+PASSO 2 — Verificar / instalar Gitea
+  Sistema faz GET /api/infra/servers/:id/services
+    e filtra serviceType='gitea'
+  
+  Cenário A — Gitea detectado:
+    Badge verde 'Gitea encontrado em {url}'
+    Campo: Token do Gitea (admin token)
+    Botão 'Conectar' → salva em infra_servers
+      com service_type='gitea'
+    → avança automaticamente
+  
+  Cenário B — Gitea não detectado:
+    Mensagem: 'Gitea não encontrado neste servidor.'
+    Botão 'Instalar Gitea automaticamente'
+      → POST /api/infra/servers/:id/services
+        com { type: 'gitea', name: 'arcadia-gitea' }
+      → Progress bar com polling do status a cada 3s
+      → Quando status='running': mostrar URL + instrução
+        para gerar token em /user/settings/applications
+      Campo: Token do Gitea
+      Botão 'Conectar e continuar'
+
+PASSO 3 — O que provisionar
+  Cards de escolha (apenas um ativo por vez):
+  
+  [🏢 Novo site Frappe para cliente]
+    → formulário no passo 4
+  
+  [🔧 Arcádia Consult]
+    → deploy do Consult neste servidor
+    → preencher: subdomínio, variáveis de ambiente
+  
+  [⚡ Arcádia Suite]
+    → deploy do Suite neste servidor
+    → preencher: subdomínio, configurações
+  
+  [📦 Serviço personalizado]
+    → campo livre: imagem Docker + nome + env vars
+
+PASSO 4 — Configurar o serviço escolhido
+
+  Se Frappe:
+    Nome do cliente (ex: Impacto Geologia)
+    Subdomínio (ex: impacto → impacto.arcadia.app)
+    Email do administrador
+    Senha inicial (com validação de força)
+    Preview da URL: https://{subdominio}.arcadia.app
+  
+  Se Consult/Suite:
+    Subdomínio
+    DATABASE_URL (gerado automaticamente ou manual)
+    Variáveis de ambiente obrigatórias listadas
+  
+  Se personalizado:
+    Imagem Docker (ex: nginx:latest)
+    Variáveis de ambiente (editor key=value)
+    Porta exposta
+
+PASSO 5 — Provisionar e monitorar
+
+  Botão 'Provisionar agora'
+  → POST /api/infra/provision/:type
+  
+  Progress bar com etapas em tempo real (SSE):
+    ⟳ Criando serviço no Coolify...
+    ⟳ Configurando variáveis de ambiente...
+    ⟳ Iniciando container...
+    ⟳ Aguardando aplicação responder...
+    ⟳ Configurando SSL automático...
+    ✓ Serviço disponível em {url}
+  
+  Quando concluído:
+    Card de sucesso com:
+      URL do serviço (link clicável)
+      Credenciais de acesso (se Frappe: admin + senha)
+      Botão 'Abrir serviço'
+      Botão 'Configurar outro serviço'
+      Botão 'Ir para Infraestrutura'
+
+ROTAS NOVAS:
+  POST /api/infra/servers/test-connection
+    → testa sem salvar (body: { coolifyUrl, token })
+  
+  POST /api/infra/provision/frappe
+    → cria serviço Frappe via CoolifyClient
+    → configura env vars
+    → inicia serviço
+    → registra em infra_services
+    → SSE de progresso
+  
+  POST /api/infra/provision/generic
+    → provisiona qualquer imagem Docker
+    → mesmo fluxo do Frappe
+
+IMPORTANTE:
+  Se qualquer passo falhar: mostrar erro específico
+  com sugestão de ação (não apenas 'erro desconhecido')
+  
+  Wizard deve ser retomável: se usuário fechar e voltar,
+  verificar se servidor já foi salvo e pular passo 1
+
+NÃO modificar: Sprints 1-6, Central de Produção,
+               qualquer outro módulo.
+
+Devolver checkpoint com checklist de validação.

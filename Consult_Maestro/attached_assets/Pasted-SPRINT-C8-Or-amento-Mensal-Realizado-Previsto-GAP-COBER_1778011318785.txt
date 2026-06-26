@@ -1,0 +1,63 @@
+SPRINT C8 — Orçamento Mensal + Realizado × Previsto
+
+GAP COBERTO: G3 da análise da planilha Impacto Geologia
+
+O que a planilha faz:
+  MetaReceitas e MetaDespesas têm 12 colunas
+  (Jan a Dez) com o valor esperado por conta.
+  O DRE mostra Realizado vs Meta lado a lado.
+
+O que o Control precisa:
+
+1. NOVA TABELA orcamentos_mensais:
+   id, tenantId, clienteId,
+   planoContaId (FK planosContas),
+   centroCustoId (FK centrosCusto — nullable),
+   ano (integer),
+   mes (integer 1-12),
+   valorPrevisto (numeric 15,2)
+   UNIQUE(tenantId, clienteId, planoContaId, centroCustoId, ano, mes)
+
+2. CRUD de orçamento:
+   GET  /api/control/clientes/:id/orcamento?ano=2026
+     → retorna matriz: conta × mês × previsto
+   POST /api/control/clientes/:id/orcamento
+     → upsert em lote (array de {planoContaId, mes, valor})
+   
+   Tela de edição: tabela com contas nas linhas,
+   Jan a Dez nas colunas, campos editáveis inline.
+   Igual ao layout MetaReceitas da planilha.
+
+3. REALIZADO × PREVISTO:
+   Endpoint GET /api/control/clientes/:id/orcamento/comparativo
+     Parâmetros: ano, mes (opcional — se vazio retorna ano todo)
+     
+     Retorna por planoContaId:
+     { conta, grupoDre, previsto, realizado,
+       desvio (realizado-previsto),
+       desvioPerc ((desvio/previsto)*100) }
+     
+     Realizado = SUM dos lançamentos pagos no período
+     agrupados por planoContaId
+
+4. ALERTAS DE DESVIO:
+   Threshold configurável por cliente (default: 15%)
+   Quando desvioPerc > threshold:
+     → Badge vermelho no dashboard
+     → Agente Controller notifica proativamente
+     → Registrar em ai_usage_logs com task='alerta_desvio_orcamento'
+
+5. INTEGRAÇÃO COM DRE:
+   DRE existente passa a ter coluna 'Previsto'
+   ao lado de 'Realizado' com % de execução.
+   
+   Ex:
+   Despesas Pessoal | Prev: R$45.000 | Real: R$47.200 | 105% ⚠
+
+6. IMPORT DE ORÇAMENTO VIA PLANILHA:
+   Aceitar upload do template MetaReceitas/MetaDespesas
+   da planilha Impacto (ou template para download).
+   Parser lê: Conta (col A), Jan...Dez (cols B-M).
+
+drizzle-kit push após adicionar orcamentos_mensais.
+Registrar endpoints em server/control/routes.ts.

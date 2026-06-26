@@ -1,0 +1,89 @@
+SPRINT PROD-2 — Reuniões + Agente + Gerador de Atas
+
+SCHEMA — duas tabelas novas (drizzle-kit push primeiro):
+
+  reunioes_projeto:
+    id, tenantId, projetoId (FK scrum_internal_projects),
+    numero integer, data timestamp, tipo varchar(30),
+    sprint varchar(50), pautaJson jsonb,
+    anotacoes text, ataDocUrl varchar(500),
+    participantes jsonb, status varchar(20) default 'agendada'
+    createdAt timestamp
+
+  acoes_reuniao:
+    id, tenantId, reuniaoId (FK reunioes_projeto),
+    descricao text, responsavel varchar(200),
+    prazo date, status varchar(20) default 'pendente'
+    createdAt timestamp
+
+SERVER — 3 services:
+
+  reunioesService.ts:
+    → CRUD de reuniões
+    → gerarPauta(reuniaoId): Agente lê sprint ativo + tarefas
+      pendentes + última reunião → gera array de itens de pauta
+    → listarAcoesPendentes(projetoId): ações das últimas
+      3 reuniões com status='pendente'
+
+  ataGeradaService.ts:
+    → gerarAta(reuniaoId): usa runWithOrchestration com
+      taskType='gerar_documento' + contexto:
+        { projeto, reuniao, sprint, tarefasConcluidas,
+          tarefasPendentes, anotacoes, acoesGeradas }
+    → Agente retorna markdown estruturado da ata
+    → Exportar markdown → .docx usando docx library
+    → Estrutura do .docx:
+        Cabeçalho: logo, projeto, cliente, data, participantes
+        1. Resumo executivo (1 parágrafo do Agente)
+        2. Pautas discutidas e decisões
+        3. Status do sprint (tabela: tarefa, responsável, status)
+        4. Próximas ações (tabela: ação, responsável, prazo)
+        5. Assinaturas (2 colunas: ARCadia | Cliente)
+    → Salvar arquivo em /uploads/atas/
+    → Atualizar reuniao.ataDocUrl com o caminho
+
+  notificacaoReuniaoService.ts:
+    → Cron diário 08:00: buscar reuniões do dia
+    → Para cada reunião encontrada: gerarPauta()
+      e enviar via WhatsApp/email se MCP Hub configurado
+
+ROUTES — adicionar em server/producao/routes.ts:
+  GET  /api/producao/projetos/:id/reunioes
+  POST /api/producao/projetos/:id/reunioes
+  GET  /api/producao/reunioes/:id
+  PUT  /api/producao/reunioes/:id
+  POST /api/producao/reunioes/:id/gerar-pauta
+  POST /api/producao/reunioes/:id/gerar-ata
+  GET  /api/producao/reunioes/:id/ata/download
+  GET  /api/producao/projetos/:id/acoes-pendentes
+
+FRONTEND — 3 páginas novas:
+
+  HistoricoReunioes.tsx:
+    → Lista de reuniões do projeto
+    → Badge por status (agendada/realizada/cancelada)
+    → Botão 'Gerar Pauta' para reuniões futuras
+    → Botão 'Gerar Ata' para reuniões realizadas
+    → Link para download da ata gerada
+
+  ReuniaoAtiva.tsx:
+    → Tela de condução da reunião
+    → Timer por pauta item
+    → Campo de anotações em tempo real
+    → Lista de ações: adicionar responsável e prazo
+    → Botão 'Encerrar Reunião' → status='realizada'
+
+  AcoesReunioes.tsx:
+    → Painel de ações pendentes de todas as reuniões
+    → Filtro por responsável e prazo
+    → Marcar como concluída
+
+Cheklist de validação:
+  → Criar reunião → pauta gerada pelo Agente com
+    base no sprint atual e tarefas pendentes
+  → Registrar notas na ReuniaoAtiva → salvas em anotacoes
+  → Clicar Gerar Ata → .docx gerado com todas as seções
+  → Download da ata funciona
+  → Ata de Go-Live (tipo='golive') inclui
+    campo "Termo de Aceite" e 2 espaços de assinatura
+  → Cron detecta reunião do dia → pauta gerada automaticamente

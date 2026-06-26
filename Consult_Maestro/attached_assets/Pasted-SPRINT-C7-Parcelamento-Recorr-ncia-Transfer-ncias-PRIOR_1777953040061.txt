@@ -1,0 +1,72 @@
+SPRINT C7 — Parcelamento + Recorrência + Transferências
+
+PRIORIDADE: desbloqueia uso real do Control.
+Sem G1+G2+G4 o sistema é inviável para volume real.
+
+G1 — PARCELAMENTO:
+  Criar tabela grupo_parcelamentos:
+    id, tenantId, clienteId, totalParcelas,
+    valorTotal, descricao, createdAt
+
+  Lançamento CP/CR ganha:
+    grupoParcelamentoId (nullable, FK)
+    numeroParcela (integer)
+    totalParcelas (integer)
+
+  Service criarLancamentoParcelado():
+    Input: { ...dadosBase, parcelas: N, valor: X }
+    Output: N lançamentos com vencimento +1 mês cada
+    Todos vinculados ao mesmo grupoParcelamentoId
+    Alteração em grupo: propaga para todas as parcelas
+      em aberto (exceto pagas/canceladas)
+
+G2 — RECORRÊNCIA:
+  Criar tabela templates_recorrencia:
+    id, tenantId, clienteId, descricao,
+    tipo (CP|CR), frequencia (mensal|quinzenal|semanal|anual),
+    diaVencimento, valorFixo, planoContaId, centroCustoId,
+    fornecedorId|clientePessoaId,
+    dataInicio, dataFim (nullable), ativa, geradasAte
+
+  Cron diário (registrar em startCrons):
+    Para cada template ativo:
+      Gerar lançamentos até 60 dias à frente
+      Atualizar geradasAte após geração
+      Não duplicar se já existe no período
+
+G4 — TRANSFERÊNCIA ENTRE CONTAS:
+  Service transferirEntreContas():
+    db.transaction() com:
+      1. Movimentação saída na conta origem (tipo=transferencia_saida)
+      2. Movimentação entrada na conta destino (tipo=transferencia_entrada)
+      3. Lançamento financeiro vinculando os dois
+    Rollback se qualquer etapa falhar
+
+  Rota: POST /api/control/clientes/:id/transferencias
+  Campos: origemId, destinoId, valor, data, descricao
+
+G5 — SALDO INICIAL COM DATA:
+  POST /api/control/contas-bancarias/:id/saldo-inicial
+    { data, valor }
+  Gera movimentação com tipo=saldo_inicial
+  Recalcula saldoAtual da conta
+
+G6 — STATUS EM DIA / ATRASADO:
+  Campo virtual no SELECT de lançamentos:
+    status calculado = CASE
+      WHEN pago IS NOT NULL THEN 'pago'
+      WHEN vencimento < NOW() THEN 'atrasado'
+      WHEN vencimento <= NOW() + 3 days THEN 'vence_hoje'
+      ELSE 'em_dia'
+    END
+  Badge colorido no frontend por status
+
+G11 — TIPOS DE DOCUMENTO:
+  Tabela tipos_documento:
+    id, tenantId, nome, icone, ativo
+  Seed com: NF-e, Boleto, PIX, CTE, Recibo,
+    Folha de Pagamento, Débito Automático, Estorno
+  Campo documento em lançamentos vira FK nullable
+    (mantém retrocompatibilidade com texto livre existente)
+
+drizzle-kit push após todas as alterações de schema.

@@ -1,0 +1,125 @@
+SPRINT PROD-4 — Central de Produção como PCP
+
+SCHEMA — 1 tabela nova (drizzle-kit push primeiro):
+
+  demandas_central:
+    id, tenantId, projetoId varchar (nullable — demanda
+      pode não ter projeto associado),
+    titulo varchar(300), descricao text,
+    tipo varchar(30):
+      'projeto' | 'modulo' | 'documento' | 'analise' | 'bug'
+    prioridade varchar(15) default 'medio':
+      'critico' | 'alto' | 'medio' | 'baixo'
+    assigneeType varchar(10) default 'human':
+      'human' | 'agent'
+    assigneeId varchar (nullable — userId ou agentId)
+    agenteTask varchar(80) (taskType para Orquestrador LLM)
+    status varchar(20) default 'fila':
+      'fila' | 'em_analise' | 'em_execucao' | 'revisao'
+      | 'concluido' | 'cancelado'
+    resultadoJson jsonb (output do agente ou notas)
+    resolvidoAt timestamp (nullable)
+    createdAt timestamp
+
+  index: (tenantId, status), (tenantId, projetoId)
+
+SERVER — demandasCentralService.ts:
+
+  listar(tenantId, filtros):
+    → WHERE tenantId + filtros opcionais:
+      status, tipo, prioridade, projetoId, assigneeType
+    → ORDER BY prioridade DESC, createdAt ASC
+    → Prioridade: critico=4, alto=3, medio=2, baixo=1
+
+  criar(tenantId, input):
+    → INSERT em demandas_central
+    → Se assigneeType='agent': disparar execucaoAgente()
+
+  execucaoAgente(demandaId, tenantId):
+    → Atualizar status → 'em_execucao'
+    → Chamar runWithOrchestration com:
+        taskType = demanda.agenteTask
+        prompt = buildPromptDemanda(demanda)
+    → Ao concluir: salvar resultado em resultadoJson
+      atualizar status → 'revisao'
+      salvar resolvidoAt
+    → Se falhar: status → 'fila' (volta para fila)
+      registrar erro em resultadoJson
+
+  buildPromptDemanda(demanda):
+    → Monta prompt contextual por tipo:
+      'documento': 'Gere ata para reunião {projetoId}...'
+      'analise': 'Analise o cronograma do projeto {id}...'
+      'modulo': 'Crie um módulo chamado {titulo}...'
+
+  getKpis(tenantId):
+    → projetosAtivos: COUNT projetos com sprint ativo
+    → demandasHoje: criadas hoje
+    → taxaEntregasPrazo: % sprints concluídos no prazo
+    → demandasAgente: pendentes para agente
+    → tempoMedioResolucao: AVG(resolvidoAt - createdAt)
+      WHERE status='concluido' últimos 30 dias
+
+ROUTES — server/producao/routes.ts:
+  GET  /api/producao/central/demandas
+       ?status=&tipo=&prioridade=&projetoId=&assigneeType=
+  POST /api/producao/central/demandas
+  GET  /api/producao/central/demandas/:id
+  PATCH /api/producao/central/demandas/:id
+  POST /api/producao/central/demandas/:id/executar-agente
+  POST /api/producao/central/demandas/:id/cancelar
+  GET  /api/producao/central/kpis
+
+FRONTEND — expandir CentralProducao.tsx existente:
+
+  PAINEL 1 — KPIs (topo, 5 cards):
+    Projetos Ativos | Demandas Hoje | Taxa Entrega Prazo %
+    | Para Agentes | Tempo Médio Resolução
+
+  PAINEL 2 — Fila de Demandas (principal, 60% da tela):
+    Filtros: Todos | Para Humano | Para Agente
+             | Crítico | Por Projeto
+    Tabela com colunas:
+      Prioridade (badge) | Título | Tipo | Projeto
+      | Assignee | Status | Criado
+    Ação por linha:
+      humano: botão 'Iniciar' → muda status
+      agente: botão 'Executar IA' → POST /executar-agente
+              spinner enquanto status='em_execucao'
+              badge verde quando status='revisao'
+
+  PAINEL 3 — Criar Demanda (lateral direita, 40%):
+    Form inline (não modal):
+      Título (obrigatório)
+      Tipo (select)
+      Prioridade (select)
+      Projeto (select — lista projetos ativos)
+      Para: Humano ou Agente IA (toggle)
+      Se Agente: TaskType (select dos tipos disponíveis:
+        'gerar_documento', 'analise_projeto',
+        'init_module_proativo', 'planejar_modulo')
+      Descrição (textarea)
+      Botão Criar
+
+  PAINEL 4 — Linha do Tempo (aba separada):
+    Gantt simplificado de todos os projetos ativos
+    Linhas = projetos, Colunas = semanas
+    Barras por sprint com cor por status
+    Go-Lives marcados com ícone de bandeira
+
+  Atualização em tempo real:
+    SSE endpoint ou polling 10s na lista de demandas
+    Quando agente conclui → badge atualiza sem reload
+
+Checklist de validação:
+  → Criar demanda tipo='documento' para agente
+    com agenteTask='gerar_documento'
+    → execução dispara automaticamente
+    → status evolui fila→em_execucao→revisao
+    → resultadoJson tem o conteúdo gerado
+  → Criar demanda tipo='analise' para agente
+    → Agente analisa sprint ativo e retorna alertas
+  → KPIs refletem dados reais dos projetos
+  → Filtro 'Para Agente' mostra só assigneeType='agent'
+  → Gantt mostra os projetos Impacto + outros ativos
+  → Demanda cancelada não volta para fila
