@@ -51,10 +51,11 @@ export function registerAllTools(): void {
   registerMicrosoftTools();
   registerWhatsappTools();
   registerBrowserTools();
+  registerRhTools();
 
   allRegistered = true;
   console.log(
-    "[mcp] registered module tools (control: 1, societario: 2, recovery: 1, google: 6, microsoft: 5, whatsapp: 2, browser: 12)",
+    "[mcp] registered module tools (control: 1, societario: 2, recovery: 1, google: 6, microsoft: 5, whatsapp: 2, browser: 12, rh: 2)",
   );
 }
 
@@ -1182,7 +1183,135 @@ function registerWhatsappTools(): void {
   })().catch((err) => console.error("[mcp/biTools] registration failed:", err));
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// RH — Sprint 9 (rh_get_equipe + rh_registrar_ponto)
+// ─────────────────────────────────────────────────────────────────────────
+
+const rhGetEquipeInputSchema = z.object({
+  departamento: z.string().optional(),
+  status:       z.string().optional(),
+});
+
+const rhRegistrarPontoInputSchema = z.object({
+  funcionarioId: z.string().min(1, "funcionarioId obrigatório"),
+  data:          z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "data deve ser YYYY-MM-DD"),
+  entrada1:      z.string().optional(),
+  saida1:        z.string().optional(),
+  entrada2:      z.string().optional(),
+  saida2:        z.string().optional(),
+  justificativa: z.string().optional(),
+});
+
+function registerRhTools(): void {
+  toolRegistry.register({
+    name: "rh_get_equipe",
+    module: "rh",
+    requiresConfirmation: false,
+    description:
+      "Lista a equipe (funcionários) do tenant com totais por departamento e cargo. Útil para responder 'quantas pessoas temos?', 'qual o quadro do departamento X?'. Filtros opcionais: departamento e status (ativo/inativo).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        departamento: { type: "string", description: "Filtra por nome do departamento. Opcional." },
+        status:       { type: "string", description: "Filtra por status (ativo, inativo). Opcional." },
+      },
+    },
+    inputValidator: rhGetEquipeInputSchema,
+    handler: async (input: z.infer<typeof rhGetEquipeInputSchema>, ctx) => {
+      const { pool } = await import("../db");
+      const conditions = ["e.tenant_id = $1"];
+      const params: any[] = [ctx.tenantId];
+      let i = 2;
+      if (input.departamento) {
+        conditions.push(`d.name ILIKE $${i}`);
+        params.push(`%${input.departamento}%`);
+        i++;
+      }
+      if (input.status) {
+        conditions.push(`e.status = $${i}`);
+        params.push(input.status);
+        i++;
+      }
+      const { rows } = await pool.query(
+        `SELECT
+           e.id, e.name, e.position, e.status,
+           d.name AS departamento,
+           e.hire_date, e.salary
+         FROM hr_employees e
+         LEFT JOIN hr_departments d ON d.id = e.department_id
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY d.name, e.name
+         LIMIT 200`,
+        params
+      );
+      const total = rows.length;
+      const porDepartamento: Record<string, number> = {};
+      for (const r of rows) {
+        const dep = r.departamento || "Sem departamento";
+        porDepartamento[dep] = (porDepartamento[dep] ?? 0) + 1;
+      }
+      return { total, porDepartamento, funcionarios: rows };
+    },
+  });
+
+  toolRegistry.register({
+    name: "rh_registrar_ponto",
+    module: "rh",
+    requiresConfirmation: true,
+    description:
+      "Registra ou atualiza o ponto de um funcionário para uma data específica. Requer confirmação porque grava no banco. Use quando o usuário pedir para registrar entrada/saída de um colaborador.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        funcionarioId: { type: "string", description: "ID do funcionário (obrigatório)." },
+        data:          { type: "string", description: "Data YYYY-MM-DD (obrigatório)." },
+        entrada1:      { type: "string", description: "Hora entrada (HH:MM). Opcional." },
+        saida1:        { type: "string", description: "Hora saída (HH:MM). Opcional." },
+        entrada2:      { type: "string", description: "Entrada após intervalo. Opcional." },
+        saida2:        { type: "string", description: "Saída após intervalo. Opcional." },
+        justificativa: { type: "string", description: "Justificativa de falta/atestado. Opcional." },
+      },
+      required: ["funcionarioId", "data"],
+    },
+    inputValidator: rhRegistrarPontoInputSchema,
+    handler: async (input: z.infer<typeof rhRegistrarPontoInputSchema>, ctx) => {
+      const { pool } = await import("../db");
+      const toMin = (hm?: string) => {
+        if (!hm) return null;
+        const [h, m] = hm.split(":").map(Number);
+        return h * 60 + (m ?? 0);
+      };
+      let total = 0;
+      const e1 = toMin(input.entrada1), s1 = toMin(input.saida1);
+      if (e1 != null && s1 != null && s1 > e1) total += s1 - e1;
+      const e2 = toMin(input.entrada2), s2 = toMin(input.saida2);
+      if (e2 != null && s2 != null && s2 > e2) total += s2 - e2;
+      const horasTrabalhadas = parseFloat((total / 60).toFixed(2));
+      const horasExtras = Math.max(0, horasTrabalhadas - 8);
+
+      const { rows } = await pool.query(
+        `INSERT INTO people_ponto
+           (tenant_id, funcionario_id, data, entrada1, saida1, entrada2, saida2,
+            horas_trabalhadas, horas_extras, justificativa, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'normal')
+         ON CONFLICT (funcionario_id, data) DO UPDATE
+         SET entrada1 = EXCLUDED.entrada1, saida1 = EXCLUDED.saida1,
+             entrada2 = EXCLUDED.entrada2, saida2 = EXCLUDED.saida2,
+             horas_trabalhadas = EXCLUDED.horas_trabalhadas,
+             horas_extras = EXCLUDED.horas_extras,
+             justificativa = EXCLUDED.justificativa
+         RETURNING *`,
+        [ctx.tenantId, input.funcionarioId, input.data,
+         input.entrada1 ?? null, input.saida1 ?? null,
+         input.entrada2 ?? null, input.saida2 ?? null,
+         horasTrabalhadas, horasExtras, input.justificativa ?? null]
+      );
+      return { ok: true, ponto: rows[0] };
+    },
+  });
+}
+
 // Helper exportado para os testes / endpoint Sprint 2.
 export function getRegisteredModuleNames(): string[] {
-  return ["core", "control", "societario", "recovery", "google", "microsoft", "whatsapp", "bi"];
+  return ["core", "control", "societario", "recovery", "google", "microsoft", "whatsapp", "bi", "rh"];
 }

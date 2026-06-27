@@ -4,6 +4,18 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { pool } from "./db";
 import { runMigrationSoe00, startEventWorker } from "./soe";
+import { runMigrationCad01, seedCad01Defaults } from "./cad";
+import { runImpactoSeeds } from "./control/seeds/impactoSeeds";
+import { runMigrationControlFin } from "./control/migrationControlFin";
+import { runMigrationCom01, handleSaleOrderConfirmed } from "./com";
+import { runMigrationFisc } from "./fisc";
+import { runMigrationCrmEvolve } from "./crm/migrationCrmEvolve";
+import {
+  runHubMigration, runHub02Migration, runHub03Migration, runHub04Migration,
+  runHub05Migration, runHub06Migration, runHub07Migration,
+  runDep01Migration, runProjPriority, runTimer01Migration, runMigrationHubImp01,
+} from "./hub";
+import { runMigrationRhMerge } from "./hr/migrationRhMerge";
 import { empresaMiddleware } from "./empresaMiddleware";
 import { startAutomationEngine } from "./automationService";
 import { startRecoveryOverdueCron } from "./recovery/overdueCron";
@@ -118,6 +130,30 @@ app.use((req, res, next) => {
 async function runStartupMigrations() {
   // SOE-PORT: fundação transacional deve rodar antes de todas as outras migrations
   await runMigrationSoe00();
+  // CAD-PORT: cadastros centrais (produto_fiscal, emitentes, tabelas_preco, condicoes_pag)
+  await runMigrationCad01();
+  // CONTROL-MERGE: tabelas AP/AR fin_*
+  await runMigrationControlFin();
+  // COM-PORT: sale_orders, sale_quotes, parcelas, eventos, numeracao
+  await runMigrationCom01();
+  // FISC-PORT: rg/ie em pessoas + fiscal_documentos
+  await runMigrationFisc();
+  // CRM-EVOLVE: pessoa_id em leads/oportunidades, sale_order_id em proposals
+  await runMigrationCrmEvolve();
+  // HUB-PORT: projetos, WBS, tarefas, timesheets, KPI, contratos, NFS-e, registros de campo
+  await runHubMigration();
+  await runHub02Migration();
+  await runHub03Migration();
+  await runHub04Migration();
+  await runHub05Migration();
+  await runHub06Migration();
+  await runHub07Migration();
+  await runDep01Migration();
+  await runProjPriority();
+  await runTimer01Migration();
+  await runMigrationHubImp01();
+  // RH-MERGE: benefícios, ponto, férias
+  await runMigrationRhMerge();
 
   const client = await pool.connect();
   try {
@@ -1424,6 +1460,28 @@ async function runStartupMigrations() {
 (async () => {
   await runStartupMigrations();
 
+  // CAD-PORT: seed condições de pagamento + tabela VAREJO para todos os tenants existentes
+  try {
+    const { rows: tenants } = await pool.query(`SELECT id FROM tenants WHERE status = 'active'`);
+    for (const t of tenants) {
+      await seedCad01Defaults(t.id);
+    }
+  } catch (err) {
+    console.error("[seed] cad01 defaults seed failed:", err);
+  }
+
+  // CONTROL-MERGE: seeds Impacto Geologia (CCs série 1100 + Orçamento 2026)
+  try {
+    const { rows: impactoTenant } = await pool.query(
+      `SELECT id FROM tenants WHERE slug = 'impacto-geologia' LIMIT 1`
+    );
+    if (impactoTenant[0]) {
+      await runImpactoSeeds(impactoTenant[0].id);
+    }
+  } catch (err) {
+    console.error("[seed] impacto seeds failed:", err);
+  }
+
   try {
     const { seedAgentDefinitionsIfNeeded } = await import("./seedAgentDefinitions");
     await seedAgentDefinitionsIfNeeded();
@@ -1449,6 +1507,10 @@ async function runStartupMigrations() {
 
   // SOE EventWorker — processa outbox de eventos em background
   startEventWorker();
+
+  // COM-PORT: registrar handler de evento sale_order.confirmed → gera AR no Control
+  const { registerHandler } = await import('./soe/eventBus');
+  registerHandler('sale_order.confirmed', handleSaleOrderConfirmed);
 
   // EMPRESA-SETUP: extrai empresa/grupo ativo dos headers HTTP
   app.use(empresaMiddleware);

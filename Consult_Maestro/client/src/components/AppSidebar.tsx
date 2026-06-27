@@ -1,12 +1,12 @@
 import { Link, useLocation } from "wouter";
-import { 
-  LayoutDashboard, 
-  Users, 
-  FolderKanban, 
-  Grid3X3, 
+import {
+  LayoutDashboard,
+  Users,
+  FolderKanban,
+  Grid3X3,
   RefreshCcw,
-  GitBranch, 
-  FileText, 
+  GitBranch,
+  FileText,
   CheckSquare,
   Settings,
   LogOut,
@@ -42,8 +42,12 @@ import {
   HardDrive,
   Rocket,
   Wand2,
-  Package
+  Package,
+  Cpu,
+  DollarSign,
+  Scale,
 } from "lucide-react";
+import { useAgentContext } from "@/contexts/AgentContext";
 import {
   Sidebar,
   SidebarContent,
@@ -71,6 +75,14 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { getRoleLabel, getSystemRoleLabel } from "@/lib/authUtils";
 import { TenantSwitcher } from "@/components/TenantSwitcher";
 import { EmpresaSelector } from "@/components/EmpresaSelector";
+
+const soeNavItems = [
+  { title: "CFO — Financeiro",    slug: "soe-financeiro", icon: DollarSign },
+  { title: "PM — Projetos",       slug: "soe-projetos",   icon: FolderKanban },
+  { title: "RH — Pessoas",        slug: "soe-rh",         icon: UsersRound },
+  { title: "Sales — Comercial",   slug: "soe-crm",        icon: TrendingUp },
+  { title: "Legal — Societário",  slug: "soe-juridico",   icon: Scale },
+];
 
 const mainNavItems = [
   { title: "Início", url: "/", icon: LayoutDashboard, module: "dashboard" },
@@ -169,6 +181,7 @@ export function AppSidebar() {
   const { user } = useAuth();
   const { systemRole, isSuperadmin, isPartner, isTenantAdmin } = useSystemRole();
   const { canView } = usePermissions();
+  const { openWithMessage } = useAgentContext();
 
   const getInitials = (firstName?: string | null, lastName?: string | null) => {
     const first = firstName?.charAt(0) || '';
@@ -401,6 +414,32 @@ export function AppSidebar() {
             </SidebarGroup>
           );
         })()}
+
+        {/* SOE — Sistema Operacional de Escritório */}
+        {canView('dashboard') && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 flex items-center gap-1">
+              <Cpu className="h-3 w-3" />
+              SOE — Agentes
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {soeNavItems.map((item) => (
+                  <SidebarMenuItem key={item.slug}>
+                    <SidebarMenuButton
+                      onClick={() => openWithMessage(`@${item.slug} `)}
+                      className="cursor-pointer"
+                      data-testid={`button-soe-agent-${item.slug}`}
+                    >
+                      <item.icon className="h-4 w-4 text-primary" />
+                      <span className="text-sm">{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {canView('suporte') && (
           <SidebarGroup>

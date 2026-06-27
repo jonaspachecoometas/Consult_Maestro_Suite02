@@ -6,7 +6,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { SuperAgentFloating } from "@/components/SuperAgentFloating";
+import { FloatingAgentSoe } from "@/components/FloatingAgentSoe";
+import { AgentContextProvider } from "@/contexts/AgentContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -38,6 +39,7 @@ const ErpAdherence = lazy(() => import("@/pages/ErpAdherence"));
 const Help = lazy(() => import("@/pages/Help"));
 const Swot = lazy(() => import("@/pages/Swot"));
 const Crm = lazy(() => import("@/pages/Crm"));
+const CrmKanban = lazy(() => import("@/pages/CrmKanban"));
 const Support = lazy(() => import("@/pages/Support"));
 const SupportTypes = lazy(() => import("@/pages/SupportTypes"));
 const TicketDetail = lazy(() => import("@/pages/TicketDetail"));
@@ -166,6 +168,7 @@ function AuthenticatedRouter() {
               <Switch>
                 <Route path="/" component={Dashboard} />
                 <Route path="/crm" component={Crm} />
+                <Route path="/crm/kanban" component={CrmKanban} />
                 {/* Cadastro legado /clientes substituído por /pessoas (CRM 2.0).
                     As rotas antigas redirecionam para preservar links existentes. */}
                 <Route path="/clientes" component={ClientesLegacyRedirect} />
@@ -305,7 +308,7 @@ function AuthenticatedRouter() {
             </ErrorBoundary>
           </main>
         </div>
-        <SuperAgentFloating />
+        <FloatingAgentSoe />
       </div>
     </SidebarProvider>
   );
@@ -353,13 +356,15 @@ function App() {
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <ErrorBoundary>
-            <ImpersonationBanner />
-            <Router />
-            <Toaster />
-          </ErrorBoundary>
-        </TooltipProvider>
+        <AgentContextProvider>
+          <TooltipProvider>
+            <ErrorBoundary>
+              <ImpersonationBanner />
+              <Router />
+              <Toaster />
+            </ErrorBoundary>
+          </TooltipProvider>
+        </AgentContextProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

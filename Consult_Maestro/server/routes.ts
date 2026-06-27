@@ -23,10 +23,16 @@ import {
 } from "./superAgentService";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { registerSocietarioRoutes } from "./societario/routes";
+import { registerCad01Routes } from "./cad";
+import { registerControlArApRoutes } from "./control/routesArAp";
+import { registerCom01Routes } from "./com";
+import { registerFiscRoutes } from "./fisc";
+import { registerHubRoutes } from "./hub";
 import { registerControlRoutes } from "./control/routes";
 import { registerProducaoRoutes } from "./producao/routes";
 import { registerHrRoutes } from "./hr/routes";
 import { registerHrPayrollRoutes } from "./hr/payrollRoutes";
+import { registerRhMergeRoutes } from "./hr/rhMergeRoutes";
 import { registerHrImportRoutes } from "./hr/importRoutes";
 import { registerHrExportRoutes } from "./hr/exportRoutes";
 import { registerHrReportRoutes } from "./hr/reportRoutes";
@@ -39,6 +45,7 @@ import { registerMarketplaceRoutes } from "./marketplace/routes";
 import { registerMarketplaceDynamicRouter } from "./marketplace/dynamicRouter";
 import { registerInfraRoutes } from "./infra/routes";
 import { registerMcpRoutes } from "./mcp/server";
+import { seedSoeAgents } from "./mcp/soeAgentSeeds";
 import { registerOauthRoutes } from "./mcp/oauthRoutes";
 import { registerBrowserAgentRoutes } from "./browserAgent/routes";
 import { registerApiKeyRoutes } from "./mcp/apiKeyRoutes";
@@ -532,8 +539,22 @@ export async function registerRoutes(
     }
   });
 
+  // CAD-PORT: Cadastros Centrais (produtos fiscais, emitentes, tabelas de preço, condições de pagamento)
+  registerCad01Routes(app);
+
   // Módulo Societário (Sprint 1 — CRUD base)
   registerSocietarioRoutes(app);
+
+  // CONTROL-MERGE: AP/AR endpoints
+  registerControlArApRoutes(app);
+
+  // COM-PORT: pedidos de venda, orçamentos, dashboard comercial
+  registerCom01Routes(app);
+
+  // FISC-PORT: validação NF-e, emissão, cancelamento, documentos fiscais, diagnóstico IE
+  registerFiscRoutes(app);
+  // HUB-PORT: projetos, WBS, tarefas, timesheets, KPI, contratos, NFS-e, registros de campo
+  registerHubRoutes(app);
 
   // Arcádia Control (Sprint 1 — Fundação financeira)
   registerControlRoutes(app);
@@ -577,6 +598,7 @@ export async function registerRoutes(
   registerHrImportRoutes(app);
   registerHrExportRoutes(app);
   registerHrReportRoutes(app);
+  registerRhMergeRoutes(app);
 
   // Módulo Recovery — Sprint 1 (Fundação: processos, credores, ações, timeline)
   registerRecoveryRoutes(app);
@@ -598,6 +620,32 @@ export async function registerRoutes(
 
   // MCP Hub Sprint 2 — endpoint /api/mcp/* (lista + executa tools do registry)
   registerMcpRoutes(app);
+
+  // AGENT-SOE: seed dos 5 agentes especializados
+  app.post("/api/soe/seed-agents", isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const result = await seedSoeAgents(req.tenantId ?? null);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/soe/agents", isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const { pool } = await import("./db");
+      const { rows } = await pool.query(
+        `SELECT id, slug, name, description, category, visible_in, allowed_tools, is_active
+         FROM agent_definitions
+         WHERE pack = 'soe' AND (tenant_id IS NULL OR tenant_id = $1)
+         ORDER BY category, name`,
+        [req.tenantId]
+      );
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // MCP Hub Sprint 3 — OAuth2 (Google primeiro): /api/oauth/google/* + /api/oauth/platform/google
   registerOauthRoutes(app);
@@ -6440,6 +6488,90 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error converting proposal to project:", error);
       res.status(500).json({ message: "Failed to convert proposal to project" });
+    }
+  });
+
+  // CRM-EVOLVE: proposta → pedido de venda (COM-PORT integration)
+  app.post("/api/crm/proposals/:id/converter-em-pedido", isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantId = (req as any).tenantId as string;
+      const userId   = getAuthUserId(req);
+      const { pool: dbPool } = await import("./db");
+      const { criarSaleOrder } = await import("./com/comService");
+      const { ok: soeOk, err: soeErr, soeContextFromReq } = await import("./soe");
+
+      const { rows: [proposal] } = await dbPool.query(
+        `SELECT * FROM crm_proposals WHERE id = $1 AND tenant_id = $2`,
+        [req.params.id, tenantId]
+      );
+      if (!proposal) return res.status(404).json({ message: "Proposta não encontrada" });
+      if (proposal.sale_order_id) {
+        return res.status(409).json({ message: "Proposta já convertida em pedido", saleOrderId: proposal.sale_order_id });
+      }
+
+      const { rows: items } = await dbPool.query(
+        `SELECT * FROM crm_proposal_items WHERE proposal_id = $1`, [req.params.id]
+      );
+
+      const ctx = soeContextFromReq(req);
+      const result = await criarSaleOrder(ctx, {
+        pessoaId:      proposal.pessoa_id ?? null,
+        observacaoCliente: `Gerado da proposta #${proposal.proposal_number ?? proposal.id}`,
+        itens: items.map((item: any) => ({
+          descricao:     item.description ?? item.name ?? "Item",
+          quantidade:    parseFloat(item.quantity ?? "1"),
+          precoUnitario: parseFloat(item.unit_price ?? "0"),
+          descontoItem:  parseFloat(item.discount ?? "0"),
+        })),
+        origemTipo: "crm_proposal",
+        origemRefId: req.params.id,
+      });
+
+      if (!result.ok) return res.status(422).json({ message: result.error });
+
+      await dbPool.query(
+        `UPDATE crm_proposals SET sale_order_id = $1, converted_to_sale_order_at = NOW(), status = 'converted', updated_at = NOW()
+         WHERE id = $2`,
+        [result.data.id, req.params.id]
+      );
+
+      res.json({ saleOrderId: result.data.id, numero: result.data.numero, ok: true });
+    } catch (error: any) {
+      console.error("Error converting proposal to sale order:", error);
+      res.status(500).json({ message: "Falha ao converter proposta em pedido", error: error.message });
+    }
+  });
+
+  // CRM-EVOLVE: update lead/oportunidade com pessoa_id
+  app.patch("/api/crm/leads/:id/pessoa", isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantId = (req as any).tenantId as string;
+      const { pessoaId } = req.body;
+      const { pool: dbPool } = await import("./db");
+      const { rows } = await dbPool.query(
+        `UPDATE crm_leads SET pessoa_id = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3 RETURNING *`,
+        [pessoaId ?? null, req.params.id, tenantId]
+      );
+      if (!rows[0]) return res.status(404).json({ message: "Lead não encontrado" });
+      res.json(rows[0]);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/crm/opportunities/:id/pessoa", isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantId = (req as any).tenantId as string;
+      const { pessoaId } = req.body;
+      const { pool: dbPool } = await import("./db");
+      const { rows } = await dbPool.query(
+        `UPDATE crm_opportunities SET pessoa_id = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3 RETURNING *`,
+        [pessoaId ?? null, req.params.id, tenantId]
+      );
+      if (!rows[0]) return res.status(404).json({ message: "Oportunidade não encontrada" });
+      res.json(rows[0]);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 

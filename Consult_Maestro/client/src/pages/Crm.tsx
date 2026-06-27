@@ -727,6 +727,12 @@ export default function Crm() {
           <p className="text-muted-foreground">Gerencie leads, oportunidades e pipeline de vendas</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <a href="/crm/kanban">
+            <Button variant="outline" size="sm">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>
+              Kanban
+            </Button>
+          </a>
           <Button onClick={() => setIsNewLeadOpen(true)} data-testid="button-new-lead">
             <UserPlus className="h-4 w-4 mr-2" />
             Novo Lead

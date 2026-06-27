@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Consult Maestro (dev)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "cross-env", "NODE_ENV=development", "tsx", "server/index.ts"],
+      "cwd": "Consult_Maestro",
+      "port": 5000
+    }
+  ]
+}

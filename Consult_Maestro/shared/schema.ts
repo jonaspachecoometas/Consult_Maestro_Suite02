@@ -5938,3 +5938,161 @@ export const tenantEmpresas = pgTable('tenant_empresas', {
 export const insertTenantEmpresaSchema = createInsertSchema(tenantEmpresas).omit({ id: true, createdAt: true, updatedAt: true });
 export type TenantEmpresa = typeof tenantEmpresas.$inferSelect;
 export type InsertTenantEmpresa = z.infer<typeof insertTenantEmpresaSchema>;
+
+// ========== CONTROL-MERGE: AP/AR + Contas Bancárias ==========
+
+export const finBankAccounts = pgTable('fin_bank_accounts', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: varchar('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 50 }).notNull(),
+  name: varchar('name', { length: 256 }).notNull(),
+  bankCode: varchar('bank_code', { length: 10 }),
+  bankName: varchar('bank_name', { length: 100 }),
+  agency: varchar('agency', { length: 20 }),
+  accountNumber: varchar('account_number', { length: 30 }),
+  accountDigit: varchar('account_digit', { length: 5 }),
+  accountType: varchar('account_type', { length: 50 }).default('checking'),
+  initialBalance: numeric('initial_balance', { precision: 15, scale: 2 }).default('0'),
+  currentBalance: numeric('current_balance', { precision: 15, scale: 2 }).default('0'),
+  isActive: boolean('is_active').default(true),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const finPaymentMethods = pgTable('fin_payment_methods', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: varchar('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 50 }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  type: varchar('type', { length: 50 }).notNull(),
+  defaultBankAccountId: integer('default_bank_account_id').references(() => finBankAccounts.id),
+  fee: numeric('fee', { precision: 5, scale: 2 }).default('0'),
+  daysToReceive: integer('days_to_receive').default(0),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const finPaymentPlans = pgTable('fin_payment_plans', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: varchar('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 50 }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  installments: integer('installments').default(1),
+  intervalDays: integer('interval_days').default(30),
+  firstDueDays: integer('first_due_days').default(30),
+  discountPercent: numeric('discount_percent', { precision: 5, scale: 2 }).default('0'),
+  interestPercent: numeric('interest_percent', { precision: 5, scale: 2 }).default('0'),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const finCashFlowCategories = pgTable('fin_cash_flow_categories', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: varchar('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 50 }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  type: varchar('type', { length: 20 }).notNull(),
+  parentId: integer('parent_id'),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const finAccountsPayable = pgTable('fin_accounts_payable', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: varchar('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  empresaId: integer('empresa_id').references(() => tenantEmpresas.id, { onDelete: 'set null' }),
+  documentNumber: varchar('document_number', { length: 100 }),
+  pessoaId: varchar('pessoa_id').references(() => pessoas.id, { onDelete: 'set null' }),
+  supplierName: varchar('supplier_name', { length: 256 }),
+  categoryId: integer('category_id').references(() => finCashFlowCategories.id),
+  description: text('description'),
+  issueDate: date('issue_date').notNull(),
+  dueDate: date('due_date').notNull(),
+  originalAmount: numeric('original_amount', { precision: 15, scale: 2 }).notNull(),
+  discountAmount: numeric('discount_amount', { precision: 15, scale: 2 }).default('0'),
+  interestAmount: numeric('interest_amount', { precision: 15, scale: 2 }).default('0'),
+  fineAmount: numeric('fine_amount', { precision: 15, scale: 2 }).default('0'),
+  paidAmount: numeric('paid_amount', { precision: 15, scale: 2 }).default('0'),
+  remainingAmount: numeric('remaining_amount', { precision: 15, scale: 2 }).notNull(),
+  status: varchar('status', { length: 50 }).default('pending'),
+  paymentMethodId: integer('payment_method_id').references(() => finPaymentMethods.id),
+  bankAccountId: integer('bank_account_id').references(() => finBankAccounts.id),
+  paidAt: timestamp('paid_at'),
+  origemRefTipo: varchar('origem_ref_tipo', { length: 30 }),
+  origemRefId: varchar('origem_ref_id', { length: 100 }),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const finAccountsReceivable = pgTable('fin_accounts_receivable', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: varchar('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  empresaId: integer('empresa_id').references(() => tenantEmpresas.id, { onDelete: 'set null' }),
+  documentNumber: varchar('document_number', { length: 100 }),
+  pessoaId: varchar('pessoa_id').references(() => pessoas.id, { onDelete: 'set null' }),
+  customerName: varchar('customer_name', { length: 256 }),
+  categoryId: integer('category_id').references(() => finCashFlowCategories.id),
+  description: text('description'),
+  issueDate: date('issue_date').notNull(),
+  dueDate: date('due_date').notNull(),
+  originalAmount: numeric('original_amount', { precision: 15, scale: 2 }).notNull(),
+  discountAmount: numeric('discount_amount', { precision: 15, scale: 2 }).default('0'),
+  interestAmount: numeric('interest_amount', { precision: 15, scale: 2 }).default('0'),
+  fineAmount: numeric('fine_amount', { precision: 15, scale: 2 }).default('0'),
+  receivedAmount: numeric('received_amount', { precision: 15, scale: 2 }).default('0'),
+  remainingAmount: numeric('remaining_amount', { precision: 15, scale: 2 }).notNull(),
+  status: varchar('status', { length: 50 }).default('pending'),
+  paymentMethodId: integer('payment_method_id').references(() => finPaymentMethods.id),
+  bankAccountId: integer('bank_account_id').references(() => finBankAccounts.id),
+  receivedAt: timestamp('received_at'),
+  origemRefTipo: varchar('origem_ref_tipo', { length: 30 }),
+  origemRefId: varchar('origem_ref_id', { length: 100 }),
+  projetoId: varchar('projeto_id', { length: 100 }),
+  projetoCodigo: varchar('projeto_codigo', { length: 50 }),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const finTransactions = pgTable('fin_transactions', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: varchar('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  bankAccountId: integer('bank_account_id').references(() => finBankAccounts.id).notNull(),
+  type: varchar('type', { length: 20 }).notNull(),
+  categoryId: integer('category_id').references(() => finCashFlowCategories.id),
+  amount: numeric('amount', { precision: 15, scale: 2 }).notNull(),
+  balanceAfter: numeric('balance_after', { precision: 15, scale: 2 }),
+  transactionDate: date('transaction_date').notNull(),
+  description: text('description'),
+  documentNumber: varchar('document_number', { length: 100 }),
+  payableId: integer('payable_id').references(() => finAccountsPayable.id),
+  receivableId: integer('receivable_id').references(() => finAccountsReceivable.id),
+  reconciled: boolean('reconciled').default(false),
+  reconciledAt: timestamp('reconciled_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const insertFinBankAccountSchema = createInsertSchema(finBankAccounts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFinPaymentMethodSchema = createInsertSchema(finPaymentMethods).omit({ id: true, createdAt: true });
+export const insertFinPaymentPlanSchema = createInsertSchema(finPaymentPlans).omit({ id: true, createdAt: true });
+export const insertFinCashFlowCategorySchema = createInsertSchema(finCashFlowCategories).omit({ id: true, createdAt: true });
+export const insertFinAccountsPayableSchema = createInsertSchema(finAccountsPayable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFinAccountsReceivableSchema = createInsertSchema(finAccountsReceivable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFinTransactionSchema = createInsertSchema(finTransactions).omit({ id: true, createdAt: true });
+
+export type FinBankAccount = typeof finBankAccounts.$inferSelect;
+export type InsertFinBankAccount = z.infer<typeof insertFinBankAccountSchema>;
+export type FinPaymentMethod = typeof finPaymentMethods.$inferSelect;
+export type InsertFinPaymentMethod = z.infer<typeof insertFinPaymentMethodSchema>;
+export type FinPaymentPlan = typeof finPaymentPlans.$inferSelect;
+export type InsertFinPaymentPlan = z.infer<typeof insertFinPaymentPlanSchema>;
+export type FinCashFlowCategory = typeof finCashFlowCategories.$inferSelect;
+export type InsertFinCashFlowCategory = z.infer<typeof insertFinCashFlowCategorySchema>;
+export type FinAccountsPayable = typeof finAccountsPayable.$inferSelect;
+export type InsertFinAccountsPayable = z.infer<typeof insertFinAccountsPayableSchema>;
+export type FinAccountsReceivable = typeof finAccountsReceivable.$inferSelect;
+export type InsertFinAccountsReceivable = z.infer<typeof insertFinAccountsReceivableSchema>;
+export type FinTransaction = typeof finTransactions.$inferSelect;
+export type InsertFinTransaction = z.infer<typeof insertFinTransactionSchema>;
